@@ -1,9 +1,8 @@
 pub mod token;
 
-use smol_str::SmolStr;
-use tig_common::Span;
-pub use token::{Token, TokenKind};
 use std::{iter::from_fn, str::Chars};
+use tig_common::{SmolStr, Span};
+pub use token::{Token, TokenKind};
 
 pub fn tokenize(input: impl AsRef<str>) -> Vec<Token> {
     let mut chars = input.as_ref().chars();
@@ -13,7 +12,21 @@ pub fn tokenize(input: impl AsRef<str>) -> Vec<Token> {
         skip_whitespace(&mut chars, &mut offset);
         let start = offset;
 
+        macro_rules! mt {
+            ($chars:expr, $offset:expr, $res:expr, $(($mchar:expr, $mres:expr));+ $(;)?) => {
+                match peek_nth(&$chars, 1) {
+                    $($mchar => {
+                        next_char(&mut $chars, &mut $offset);
+                        $mres
+                    }),+
+                    _ => $res,
+                }
+            };
+        }
+
         let kind = match peek_char(&chars) {
+            '=' => T![=],
+            ':' => mt!(chars, offset, T![:], ('=', T![:=])),
             '(' => T!['('],
             ')' => T![')'],
             '{' => T!['{'],
@@ -25,11 +38,31 @@ pub fn tokenize(input: impl AsRef<str>) -> Vec<Token> {
             '*' => T![*],
             '/' => T![/],
             '\0' if at_eof(&chars) => return None,
+            c @ '_' => {
+                if peek_nth(&chars, 1) == 'm'
+                    && peek_nth(&chars, 2) == 'a'
+                    && peek_nth(&chars, 3) == 'i'
+                    && peek_nth(&chars, 4) == 'n'
+                {
+                    chars.next();
+                    chars.next();
+                    chars.next();
+                    chars.next();
+                    chars.next();
+                    offset += 5;
+                    TokenKind::Ident("_main".into())
+                } else {
+                    TokenKind::Unknown(c)
+                }
+            }
+            c if c.is_ascii_digit() => TokenKind::Int(eat_int(&mut chars, &mut offset)),
             c if can_start_ident(c) => {
                 let ident = eat_ident(&mut chars, &mut offset);
                 match ident.as_str() {
                     "function" => T![function],
-                    "_main" => T![_main],
+                    "nil" => T![nil],
+                    "var" => T![var],
+                    "type" => T![type],
                     _ => T![ident ident],
                 }
             }
@@ -45,7 +78,8 @@ pub fn tokenize(input: impl AsRef<str>) -> Vec<Token> {
             span: Span::new(start, end),
             kind,
         })
-    }).collect::<Vec<_>>();
+    })
+    .collect::<Vec<_>>();
 
     let eof_span = tokens
         .iter()
@@ -62,9 +96,9 @@ pub fn tokenize(input: impl AsRef<str>) -> Vec<Token> {
 
 /// Checks if the character can start an identifier.
 ///
-/// `[\w_]`
+/// `[\w]`
 fn can_start_ident(c: char) -> bool {
-    c.is_alphabetic() || c == '_'
+    c.is_alphabetic()
 }
 
 /// Checks if the character can be included in an identifier.
@@ -89,8 +123,15 @@ fn next_char(chars: &mut Chars, offset: &mut u32) -> char {
 }
 
 /// Peeks the first character in the input stream.
+#[inline]
+fn peek_nth(chars: &Chars, n: usize) -> char {
+    chars.clone().nth(n).unwrap_or('\0')
+}
+
+/// Peeks the first character in the input stream.
+#[inline]
 fn peek_char(chars: &Chars) -> char {
-    chars.clone().next().unwrap_or('\0')
+    peek_nth(chars, 0)
 }
 
 /// There are no more characters in the input stream.
@@ -98,15 +139,11 @@ fn at_eof(chars: &Chars) -> bool {
     chars.clone().next().is_none()
 }
 
-/// Consume an identifier from the input stream.
-///
-/// # Assumptions
-///  * The first character can start an identifier.
-fn eat_ident(chars: &mut Chars, offset: &mut u32) -> SmolStr {
+fn eat_while<F: Fn(char) -> bool>(chars: &mut Chars, offset: &mut u32, test: F) -> SmolStr {
     let iter = chars.clone();
     let mut count = 0;
 
-    while is_ident(peek_char(&chars)) {
+    while test(peek_char(&chars)) {
         next_char(chars, offset);
         count += 1;
     }
@@ -114,11 +151,27 @@ fn eat_ident(chars: &mut Chars, offset: &mut u32) -> SmolStr {
     SmolStr::new(iter.take(count).collect::<String>())
 }
 
+/// Consume an identifier from the input stream.
+///
+/// # Assumptions
+///  * The first character can start an identifier.
+fn eat_ident(chars: &mut Chars, offset: &mut u32) -> SmolStr {
+    eat_while(chars, offset, is_ident)
+}
+
+/// Consume an integer from the input stream.
+///
+/// # Assumptions
+///  * The first character is an ascii digit.
+fn eat_int(chars: &mut Chars, offset: &mut u32) -> SmolStr {
+    eat_while(chars, offset, |c| c.is_ascii_digit())
+}
+
 /// Returns whether the lexer should consume the next character in the input stream, or it has
 /// already been consumed.
 fn should_advance(kind: &TokenKind) -> bool {
     use TokenKind::*;
-    !(matches!(kind, Ident(_)) || kind.is_keyword())
+    !(matches!(kind, Ident(_) | Int(_)) || kind.is_keyword())
 }
 
 #[cfg(test)]
@@ -127,7 +180,10 @@ mod tests {
 
     macro_rules! tok {
         ($kind:expr, $lo:expr, $hi:expr $(,)?) => {
-            Token { span: Span::new($lo as u32, $hi as u32), kind: $kind }
+            Token {
+                span: Span::new($lo as u32, $hi as u32),
+                kind: $kind,
+            }
         };
     }
 
@@ -139,7 +195,7 @@ mod tests {
     #[test]
     fn test_single_tokens() {
         check(
-            "(){}[]+-*/",
+            "(){}[]+-*/:",
             &[
                 tok!(T!['('], 0, 1),
                 tok!(T![')'], 1, 2),
@@ -151,9 +207,15 @@ mod tests {
                 tok!(T![-], 7, 8),
                 tok!(T![*], 8, 9),
                 tok!(T![/], 9, 10),
-                tok!(T![eof], 9, 10),
+                tok!(T![:], 10, 11),
+                tok!(T![eof], 10, 11),
             ],
         );
+    }
+
+    #[test]
+    fn test_multi_tokens() {
+        check(":=", &[tok!(T![:=], 0, 2), tok!(T![eof], 1, 2)]);
     }
 
     #[test]
@@ -169,13 +231,28 @@ mod tests {
     }
 
     #[test]
+    fn test_integers() {
+        check(
+            "0 100",
+            &[
+                tok!(T![int "0"], 0, 1),
+                tok!(T![int "100"], 2, 5),
+                tok!(T![eof], 4, 5),
+            ],
+        );
+    }
+
+    #[test]
     fn test_keywords() {
         check(
-            "function _main",
+            "function nil _main var type",
             &[
                 tok!(T![function], 0, 8),
-                tok!(T![_main], 9, 14),
-                tok!(T![eof], 13, 14),
+                tok!(T![nil], 9, 12),
+                tok!(T![ident "_main"], 13, 18),
+                tok!(T![var], 19, 22),
+                tok!(T![type], 23, 27),
+                tok!(T![eof], 26, 27),
             ],
         );
     }

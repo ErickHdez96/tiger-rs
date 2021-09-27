@@ -24,6 +24,9 @@ impl Span {
     /// assert_eq!(s3, Span::new(0, 15));
     /// ```
     pub fn extend(self, other: Self) -> Self {
-        Self { lo: self.lo, hi: other.hi }
+        Self {
+            lo: self.lo,
+            hi: other.hi,
+        }
     }
 }
