@@ -69,9 +69,9 @@ impl Parser {
 
     fn parse(&mut self) -> PResult<ast::Program> {
         let res = if can_start_expr(&self.peek().kind) {
-            self.parse_expr().map(|e| ast::Program::Expr(e))
+            self.parse_expr().map(ast::Program::Expr)
         } else if can_start_dec(&self.peek().kind) {
-            self.parse_decs().map(|decs| ast::Program::Decs(decs))
+            self.parse_decs().map(ast::Program::Decs)
         } else {
             let t = self.peek();
             Err(SError!(
@@ -92,7 +92,7 @@ impl Parser {
     }
 
     fn parse_int(&self, int: &str, span: Span) -> PResult<u64> {
-        u64::from_str_radix(int, 10)
+        int.parse::<u64>()
             // The lexer already makes sure an integer is only [0-9]
             // Hence, only possible error is integer overflow
             .map_err(|_| SError!(span, "Integer too large to fit in 64 bits"))

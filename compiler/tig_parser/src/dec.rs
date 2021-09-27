@@ -3,10 +3,10 @@ use tig_ast::ast;
 use tig_lexer::T;
 
 #[derive(Debug)]
-enum DKind {
-    FDec(ast::Fundec),
-    VDec(ast::Vardec),
-    TDec(ast::Typedec),
+enum DecKind {
+    F(ast::Fundec),
+    V(ast::Vardec),
+    T(ast::Typedec),
 }
 
 impl Parser {
@@ -25,7 +25,7 @@ impl Parser {
             // we have to group them together.
             let (decspan, dec) = self.parse_dec()?;
             match dec {
-                DKind::FDec(fdec) => {
+                DecKind::F(fdec) => {
                     // Flush the typedecs if any
                     if !t_decs.is_empty() {
                         decs.push(
@@ -37,7 +37,7 @@ impl Parser {
                     }
                     f_decs.push(fdec);
                 }
-                DKind::VDec(vdec) => {
+                DecKind::V(vdec) => {
                     if !f_decs.is_empty() {
                         decs.push(
                             ast!{dec, fn, start_span.extend(last_span), std::mem::take(&mut f_decs)}
@@ -50,7 +50,7 @@ impl Parser {
                     }
                     decs.push(ast! {dec, var, decspan, vdec});
                 }
-                DKind::TDec(tdec) => {
+                DecKind::T(tdec) => {
                     if !f_decs.is_empty() {
                         decs.push(
                             ast!{dec, fn, start_span.extend(last_span), std::mem::take(&mut f_decs)}
@@ -76,7 +76,7 @@ impl Parser {
         Ok(decs)
     }
 
-    fn parse_dec(&mut self) -> PResult<(Span, DKind)> {
+    fn parse_dec(&mut self) -> PResult<(Span, DecKind)> {
         let t = self.peek();
         match t.kind {
             TokenKind::Function => self.parse_functiondec(),
@@ -91,7 +91,7 @@ impl Parser {
     }
 
     /// function <ident> (<params>) = <body>
-    fn parse_functiondec(&mut self) -> PResult<(Span, DKind)> {
+    fn parse_functiondec(&mut self) -> PResult<(Span, DecKind)> {
         let start = self.next().span;
         let name = self.eat_ident()?;
         self.eat(&T!['('])?;
@@ -100,29 +100,29 @@ impl Parser {
         let body = self.parse_expr()?;
         Ok((
             start.extend(body.span),
-            DKind::FDec(ast! {fundec, name, vec![], None, body}),
+            DecKind::F(ast! {fundec, name, vec![], None, body}),
         ))
     }
 
     /// var <ident> := <init>
-    fn parse_vardec(&mut self) -> PResult<(Span, DKind)> {
+    fn parse_vardec(&mut self) -> PResult<(Span, DecKind)> {
         let start = self.next().span;
         let name = self.eat_ident()?;
         self.eat(&T![:=])?;
         let init = self.parse_expr()?;
         Ok((
             start.extend(init.span),
-            DKind::VDec(ast! {vardec, name, false, None, init}),
+            DecKind::V(ast! {vardec, name, false, None, init}),
         ))
     }
 
     /// type <ident> = <type>
-    fn parse_typedec(&mut self) -> PResult<(Span, DKind)> {
+    fn parse_typedec(&mut self) -> PResult<(Span, DecKind)> {
         let start = self.next().span;
         let name = self.eat_ident()?;
         self.eat(&T![=])?;
         let ty = self.parse_type()?;
-        Ok((start.extend(ty.span), DKind::TDec(ast! {tydec, name, ty})))
+        Ok((start.extend(ty.span), DecKind::T(ast! {tydec, name, ty})))
     }
 }
 

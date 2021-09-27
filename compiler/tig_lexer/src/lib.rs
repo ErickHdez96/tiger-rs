@@ -143,7 +143,7 @@ fn eat_while<F: Fn(char) -> bool>(chars: &mut Chars, offset: &mut u32, test: F) 
     let iter = chars.clone();
     let mut count = 0;
 
-    while test(peek_char(&chars)) {
+    while test(peek_char(chars)) {
         next_char(chars, offset);
         count += 1;
     }

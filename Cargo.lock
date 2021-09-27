@@ -45,3 +45,10 @@ dependencies = [
  "tig_error",
  "tig_lexer",
 ]
+
+[[package]]
+name = "tig_semant"
+version = "0.1.0"
+dependencies = [
+ "tig_common",
+]
