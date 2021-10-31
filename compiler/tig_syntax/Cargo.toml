@@ -1,0 +1,9 @@
+[package]
+name = "tig_syntax"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tig_common = { path = "../tig_common" }
+tig_ast = { path = "../tig_ast" }
+chumsky = "0.5"

@@ -1,4 +1,4 @@
-use tig_common::{SmolStr, Span};
+use tig_common::{SmolStr, Span, Spanned};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Program {
@@ -6,11 +6,7 @@ pub enum Program {
     Decs(Vec<Dec>),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Var {
-    pub span: Span,
-    pub kind: VarKind,
-}
+pub type Var = Spanned<VarKind>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VarKind {
@@ -19,18 +15,14 @@ pub enum VarKind {
     //Subscript(Box<Var>, Box<Expr>),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Expr {
-    pub span: Span,
-    pub kind: ExprKind,
-}
+pub type Expr = Spanned<ExprKind>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExprKind {
     Nil,
     Var(Var),
     Int(u64),
-    //String(SmolStr),
+    String(SmolStr),
     //Call {
     //    func: Ident,
     //    args: Vec<Expr>,
@@ -49,11 +41,11 @@ pub enum ExprKind {
     //    var: Var,
     //    expr: Box<Expr>,
     //},
-    //If {
-    //    test: Box<Expr>,
-    //    then_branch: Box<Expr>,
-    //    else_branch: Option<Box<Expr>>,
-    //},
+    If {
+        test: Box<Expr>,
+        then_branch: Box<Expr>,
+        else_branch: Option<Box<Expr>>,
+    },
     //While {
     //    test: Box<Expr>,
     //    body: Box<Expr>,
@@ -70,11 +62,11 @@ pub enum ExprKind {
     //    decs: Vec<Dec>,
     //    body: Box<Expr>,
     //},
-    //Array {
-    //    ty: Ident,
-    //    size: Box<Expr>,
-    //    init: Box<Expr>,
-    //},
+    Array {
+        ty: Ident,
+        size: Box<Expr>,
+        init: Box<Expr>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -125,11 +117,7 @@ pub enum TypeKind {
     Array(Ident),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Ident {
-    pub span: Span,
-    pub value: SmolStr,
-}
+pub type Ident = Spanned<SmolStr>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Field {
@@ -161,31 +149,63 @@ pub enum BinOp {
 #[macro_export]
 macro_rules! ast {
     (var, simple, $span:expr, $var:expr $(,)?) => {
-        tig_ast::Var {
-            span: $span,
-            kind: tig_ast::VarKind::Simple($var.into()),
-        }
+        (tig_ast::VarKind::Simple($var.into()), $span)
+    };
+
+    (prog_expr, $expr:expr $(,)?) => {
+        tig_ast::Program::Expr($expr)
     };
 
     (expr, nil, $span:expr $(,)?) => {
-        tig_ast::Expr {
-            span: $span,
-            kind: tig_ast::ExprKind::Nil,
-        }
+        (tig_ast::ExprKind::Nil, $span)
     };
 
     (expr, var, $span:expr, $var:expr $(,)?) => {
-        tig_ast::Expr {
-            span: $span,
-            kind: tig_ast::ExprKind::Var(ast! {var, simple, $span, $var}),
-        }
+        (
+            tig_ast::ExprKind::Var(ast! {var, simple, $span, $var}),
+            $span,
+        )
     };
 
     (expr, int, $span:expr, $int:expr $(,)?) => {
-        tig_ast::Expr {
-            span: $span,
-            kind: tig_ast::ExprKind::Int($int as u64),
-        }
+        (tig_ast::ExprKind::Int($int as u64), $span)
+    };
+
+    (expr, str, $span:expr, $str:expr $(,)?) => {
+        (tig_ast::ExprKind::String($str.into()), $span)
+    };
+
+    (expr, if, $span:expr, $if:expr, $then:expr $(,)?) => {
+        (
+            tig_ast::ExprKind::If {
+                test: Box::new($if),
+                then_branch: Box::new($then),
+                else_branch: None,
+            },
+            $span,
+        )
+    };
+
+    (expr, if_else, $span:expr, $if:expr, $then:expr, $else:expr $(,)?) => {
+        (
+            tig_ast::ExprKind::If {
+                test: Box::new($if),
+                then_branch: Box::new($then),
+                else_branch: Some(Box::new($else)),
+            },
+            $span,
+        )
+    };
+
+    (expr, array, $span:expr, $ty:expr, $size:expr, $init:expr $(,)?) => {
+        (
+            tig_ast::ExprKind::Array {
+                ty: $ty,
+                size: Box::new($size),
+                init: Box::new($init),
+            },
+            $span,
+        )
     };
 
     (expr, binop, $span:expr, $binop:expr, $left:expr, $right:expr $(,)?) => {
@@ -228,10 +248,7 @@ macro_rules! ast {
     };
 
     (ident, $span:expr, $name:expr $(,)?) => {
-        tig_ast::Ident {
-            span: $span,
-            value: $name.into(),
-        }
+        ($name.into(), $span)
     };
 
     (fundec, $name:expr, $params:expr, $result:expr, $body:expr $(,)?) => {

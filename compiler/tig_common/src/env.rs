@@ -18,7 +18,7 @@ impl<'env, K, V> Default for Env<'env, K, V> {
 
 impl<'env, K, V> Env<'env, K, V>
 where
-    K: Eq + Hash
+    K: Eq + Hash,
 {
     pub fn new() -> Self {
         Self::default()
@@ -40,11 +40,10 @@ where
     /// present in the current one, it will try recursively with the parent environments
     /// until it is found, or the root is reached, in which case it returns None.
     pub fn get(&self, key: &K) -> Option<&V> {
-        self.ctx.get(key)
-            .or_else(|| match self.parent {
-                Some(p) => p.get(key),
-                None => None,
-            })
+        self.ctx.get(key).or_else(|| match self.parent {
+            Some(p) => p.get(key),
+            None => None,
+        })
     }
 
     /// Retrieves the value associated with key from the current environment, if it is
