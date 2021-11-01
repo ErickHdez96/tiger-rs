@@ -10,9 +10,9 @@ pub type Var = Spanned<VarKind>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VarKind {
-    Simple(SmolStr),
-    //Field(Box<Var>, SmolStr),
-    //Subscript(Box<Var>, Box<Expr>),
+    Simple(Ident),
+    Field(Box<Var>, Ident),
+    Subscript(Box<Var>, Box<Expr>),
 }
 
 pub type Expr = Spanned<ExprKind>;
@@ -32,10 +32,10 @@ pub enum ExprKind {
         left: Box<Expr>,
         right: Box<Expr>,
     },
-    //Record {
-    //    fields: Vec<FieldExpr>,
-    //    ty: Ident,
-    //},
+    Record {
+        fields: Vec<FieldExpr>,
+        ty: Ident,
+    },
     //Seq(Vec<Expr>),
     //Assign {
     //    var: Var,
@@ -149,7 +149,11 @@ pub enum BinOp {
 #[macro_export]
 macro_rules! ast {
     (var, simple, $span:expr, $var:expr $(,)?) => {
-        (tig_ast::VarKind::Simple($var.into()), $span)
+        (tig_ast::VarKind::Simple(($var.into(), $span)), $span)
+    };
+
+    (var, subscript, $span:expr, $var:expr, $idx:expr $(,)?) => {
+        (tig_ast::VarKind::Subscript(Box::new($var), Box::new($idx)), $span)
     };
 
     (prog_expr, $expr:expr $(,)?) => {
@@ -160,9 +164,16 @@ macro_rules! ast {
         (tig_ast::ExprKind::Nil, $span)
     };
 
-    (expr, var, $span:expr, $var:expr $(,)?) => {
+    (expr, varsimple, $span:expr, $var:expr $(,)?) => {
         (
             tig_ast::ExprKind::Var(ast! {var, simple, $span, $var}),
+            $span,
+        )
+    };
+
+    (expr, var, $span:expr, $var:expr $(,)?) => {
+        (
+            tig_ast::ExprKind::Var($var),
             $span,
         )
     };
@@ -206,6 +217,23 @@ macro_rules! ast {
             },
             $span,
         )
+    };
+
+    (expr, record, $span:expr, $ty:expr, $fields:expr $(,)?) => {
+        (
+            tig_ast::ExprKind::Record {
+                ty: $ty,
+                fields: $fields,
+            },
+            $span,
+        )
+    };
+
+    (recordfield, $field:expr, $expr:expr $(,)?) => {
+        tig_ast::FieldExpr {
+            field: $field,
+            expr: $expr,
+        }
     };
 
     (expr, binop, $span:expr, $binop:expr, $left:expr, $right:expr $(,)?) => {
