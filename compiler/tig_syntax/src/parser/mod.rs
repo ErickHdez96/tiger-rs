@@ -6,7 +6,7 @@ use tig_ast as ast;
 use tig_ast::ast;
 use tig_common::Span;
 use tig_error::{SError, SpannedError};
-use tig_lexer::{tokenize, Token, TokenKind};
+use crate::{tokenize, Token, TokenKind};
 
 type PResult<T> = Result<T, SpannedError>;
 

@@ -30,25 +30,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "tig_lexer"
+name = "tig_semant"
 version = "0.1.0"
 dependencies = [
  "tig_common",
 ]
 
 [[package]]
-name = "tig_parser"
+name = "tig_syntax"
 version = "0.1.0"
 dependencies = [
  "tig_ast",
  "tig_common",
  "tig_error",
- "tig_lexer",
-]
-
-[[package]]
-name = "tig_semant"
-version = "0.1.0"
-dependencies = [
- "tig_common",
 ]

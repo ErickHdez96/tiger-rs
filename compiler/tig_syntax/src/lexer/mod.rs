@@ -2,7 +2,8 @@ pub mod token;
 
 use std::{iter::from_fn, str::Chars};
 use tig_common::{SmolStr, Span};
-pub use token::{Token, TokenKind};
+use token::{Token, TokenKind};
+use crate::T;
 
 pub fn tokenize(input: impl AsRef<str>) -> Vec<Token> {
     let mut chars = input.as_ref().chars();

@@ -1,7 +1,9 @@
 [package]
-name = "tig_error"
+name = "tig_syntax"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 tig_common = { path = "../tig_common" }
+tig_ast = { path = "../tig_ast" }
+tig_error = { path = "../tig_error" }
