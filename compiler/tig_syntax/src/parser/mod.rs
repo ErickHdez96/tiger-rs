@@ -138,5 +138,5 @@ fn can_start_expr(kind: &TokenKind) -> bool {
 /// Test whether a token can appear at the start of a declaration.
 fn can_start_dec(kind: &TokenKind) -> bool {
     use TokenKind::*;
-    matches!(kind, Function | Var | Type)
+    matches!(kind, Function | Var | Type | Primitive)
 }

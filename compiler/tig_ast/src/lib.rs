@@ -89,6 +89,7 @@ pub enum DecKind {
     Function(Vec<Fundec>),
     Var(Vardec),
     Type(Vec<Typedec>),
+    Primitive(Primitivedec),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -97,6 +98,13 @@ pub struct Fundec {
     pub params: Vec<Field>,
     pub result: Option<Ident>,
     pub body: Expr,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Primitivedec {
+    pub name: Ident,
+    pub params: Vec<Field>,
+    pub result: Option<Ident>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -384,6 +392,13 @@ macro_rules! ast {
         }
     };
 
+    (dec, primitive, $span:expr, $primitivedec:expr $(,)?) => {
+        tig_ast::Dec {
+            span: $span,
+            kind: tig_ast::DecKind::Primitive($primitivedec),
+        }
+    };
+
     (type, name, $span:expr, $id:expr $(,)?) => {
         tig_ast::Type {
             span: $span,
@@ -404,6 +419,22 @@ macro_rules! ast {
             params: $params,
             result: $result,
             body: $body,
+        }
+    };
+
+    (primitivedec, $name:expr, $params:expr, $result:expr $(,)?) => {
+        tig_ast::Primitivedec {
+            name: $name,
+            params: $params,
+            result: $result,
+        }
+    };
+
+    (param, $name:expr, $ty:expr $(,)?) => {
+        tig_ast::Field {
+            field: $name,
+            escape: false,
+            ty: $ty,
         }
     };
 

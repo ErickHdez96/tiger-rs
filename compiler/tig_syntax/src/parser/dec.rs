@@ -2,10 +2,44 @@ use super::*;
 use crate::T;
 use tig_ast::ast;
 
+// x - Implemented
+// - - Incomplete
+//   - Not implemented
+//
+// - decs ::= { dec }
+// - dec ::=
+//     # Type declaration.
+// x     type id = ty
+//     # Class definition (alternative form).
+//     | class id [ extends type-id ] { classfields }
+//     # Variable declaration.
+// x   | vardec
+//     # Function declaration.
+// x   | function id ( tyfields ) [ : type-id ] = exp
+//     # Primitive declaration.
+// x   | primitive id ( tyfields ) [ : type-id ]
+//     # Importing a set of declarations.
+//     | import string
+//
+//
+// x vardec ::= var id [ : type-id ] := exp
+//
+//
+//   classfields ::= { classfield }
+//   # Class fields.
+//   classfield ::=
+//     # Attribute declaration.
+//       vardec
+//     # Method declaration.
+//     | method id ( tyfields ) [ : type-id ] = exp
+//
+// x tyfields ::= [ id : type-id { , id : type-id } ]
+
 #[derive(Debug)]
 enum DecKind {
     F(ast::Fundec),
     V(ast::Vardec),
+    P(ast::Primitivedec),
     T(ast::Typedec),
 }
 
@@ -37,7 +71,7 @@ impl Parser {
                     }
                     f_decs.push(fdec);
                 }
-                DecKind::V(vdec) => {
+                DecKind::V(_) | DecKind::P(_) => {
                     if !f_decs.is_empty() {
                         decs.push(
                             ast!{dec, fn, start_span.extend(last_span), std::mem::take(&mut f_decs)}
@@ -48,7 +82,18 @@ impl Parser {
                             ast!{dec, ty, start_span.extend(last_span), std::mem::take(&mut t_decs)}
                             );
                     }
-                    decs.push(ast! {dec, var, decspan, vdec});
+
+                    match dec {
+                        DecKind::V(vdec) => {
+                            decs.push(ast! {dec, var, decspan, vdec});
+                        }
+                        DecKind::P(odec) => {
+                            decs.push(ast! {dec, primitive, decspan, odec});
+                        }
+                        _ => {
+                            unreachable!()
+                        }
+                    }
                 }
                 DecKind::T(tdec) => {
                     if !f_decs.is_empty() {
@@ -79,44 +124,110 @@ impl Parser {
     fn parse_dec(&mut self) -> PResult<(Span, DecKind)> {
         let t = self.peek();
         match t.kind {
-            TokenKind::Function => self.parse_functiondec(),
-            TokenKind::Var => self.parse_vardec(),
-            TokenKind::Type => self.parse_typedec(),
+            T![function] => self.parse_functiondec(),
+            T![primitive] => self.parse_primitivedec(),
+            T![var] => self.parse_vardec(),
+            T![type] => self.parse_typedec(),
             _ => Err(SError!(
                 t.span,
-                "Expected function, var or type, found `{}`",
+                "Expected function, primitive, var or type, found `{}`",
                 t.kind
             )),
         }
     }
 
-    /// function <ident> (<params>) = <body>
+    /// function <ident> `(` <params> `)` `=` <body>
     fn parse_functiondec(&mut self) -> PResult<(Span, DecKind)> {
         let start = self.next().span;
         let name = self.eat_ident()?;
         self.eat(&T!['('])?;
+        let params = self.parse_params()?;
         self.eat(&T![')'])?;
+        let ty = if self.peek().kind == T![:] {
+            self.next();
+            Some(self.eat_ident()?)
+        } else {
+            None
+        };
         self.eat(&T![=])?;
         let body = self.parse_expr()?;
         Ok((
             start.extend(body.span),
-            DecKind::F(ast! {fundec, name, vec![], None, body}),
+            DecKind::F(ast! {fundec, name, params, ty, body}),
         ))
     }
 
-    /// var <ident> := <init>
+    /// primitive <ident> `(` <params> `)`
+    fn parse_primitivedec(&mut self) -> PResult<(Span, DecKind)> {
+        let start = self.next().span;
+        let name = self.eat_ident()?;
+        self.eat(&T!['('])?;
+        let params = self.parse_params()?;
+        let rparen_span = self.eat(&T![')'])?.span;
+        let (ty, end_span) = if self.peek().kind == T![:] {
+            self.next();
+            let ty = self.eat_ident()?;
+            let end_span = ty.span;
+            (Some(ty), end_span)
+        } else {
+            (None, rparen_span)
+        };
+        Ok((
+            start.extend(end_span),
+            DecKind::P(ast! {primitivedec, name, params, ty}),
+        ))
+    }
+
+    fn parse_params(&mut self) -> PResult<Vec<ast::Field>> {
+        let mut fields = vec![];
+        loop {
+            match self.peek() {
+                Token {
+                    span,
+                    kind: TokenKind::Ident(id),
+                } => {
+                    let span = *span;
+                    let id = id.clone();
+                    self.next();
+                    self.eat(&T![:])?;
+                    let ty = self.eat_ident()?;
+                    fields.push(ast::Field {
+                        field: ast::Ident { span, value: id },
+                        escape: false,
+                        ty,
+                    });
+                }
+                _ => break,
+            }
+
+            if self.peek().kind == T![,] {
+                self.next();
+            } else {
+                break;
+            }
+        }
+        Ok(fields)
+    }
+
+    /// var <ident> [ `:` <type-id> ] `:=` <init>
     fn parse_vardec(&mut self) -> PResult<(Span, DecKind)> {
         let start = self.next().span;
         let name = self.eat_ident()?;
+        let ty = if self.peek().kind == T![:] {
+            self.next();
+            Some(self.eat_ident()?)
+        } else {
+            None
+        };
         self.eat(&T![:=])?;
         let init = self.parse_expr()?;
         Ok((
             start.extend(init.span),
-            DecKind::V(ast! {vardec, name, false, None, init}),
+            DecKind::V(ast! {vardec, name, false, ty, init}),
         ))
     }
 
-    /// type <ident> = <type>
+    /// type <ident> `=` <type>
     fn parse_typedec(&mut self) -> PResult<(Span, DecKind)> {
         let start = self.next().span;
         let name = self.eat_ident()?;
@@ -145,7 +256,7 @@ mod tests {
     }
 
     #[test]
-    fn test_main() {
+    fn parses_main() {
         check(
             "function _main () = nil",
             &[ast! {
@@ -164,7 +275,56 @@ mod tests {
     }
 
     #[test]
-    fn test_var() {
+    fn parses_function_dec() {
+        check(
+            "function a (a: int, b: string): int = 3",
+            &[ast! {
+                dec, fn, span!(0, 39),
+                vec![
+                    ast!{
+                        fundec,
+                        ast!{ident, span!(9, 10), "a"},
+                        vec![
+                            ast!{param,
+                                ast!{ident, span!(12, 13), "a"},
+                                ast!{ident, span!(15, 18), "int"},
+                            },
+                            ast!{param,
+                                ast!{ident, span!(20, 21), "b"},
+                                ast!{ident, span!(23, 29), "string"},
+                            },
+                        ],
+                        Some(ast!{ident, span!(32, 35), "int"}),
+                        ast!{expr, int, span!(38, 39), 3},
+                    },
+                ],
+            }],
+        );
+    }
+
+    #[test]
+    fn parses_primitive_dec() {
+        check(
+            "primitive atoi(s: string): int",
+            &[ast! {
+                dec, primitive, span!(0, 30),
+                    ast!{
+                        primitivedec,
+                        ast!{ident, span!(10, 14), "atoi"},
+                        vec![
+                            ast!{param,
+                                ast!{ident, span!(15, 16), "s"},
+                                ast!{ident, span!(18, 24), "string"},
+                            },
+                        ],
+                        Some(ast!{ident, span!(27, 30), "int"}),
+                    },
+            }],
+        );
+    }
+
+    #[test]
+    fn parses_var() {
         check(
             "var a := 1",
             &[ast! {
@@ -178,10 +338,24 @@ mod tests {
                 },
             }],
         );
+
+        check(
+            "var a: int := 1",
+            &[ast! {
+                dec, var, span!(0, 15),
+                ast!{
+                    vardec,
+                    ast!{ident, span!(4, 5), "a"},
+                    false,
+                    Some(ast!{ident, span!(7, 10), "int"}),
+                    ast!{expr, int, span!(14, 15), 1},
+                },
+            }],
+        );
     }
 
     #[test]
-    fn test_typedec() {
+    fn parses_typedec() {
         check(
             "type a = int",
             &[ast! {
