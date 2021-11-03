@@ -15,6 +15,11 @@ pub enum TokenKind {
     Dummy,
 
     Eq,
+    Neq,
+    Lt,
+    Lte,
+    Gt,
+    Gte,
     Assign,
 
     LParen,
@@ -29,15 +34,37 @@ pub enum TokenKind {
     Star,
     Slash,
 
+    Comma,
+    Dot,
     Colon,
+    Semicolon,
+
+    Ampersand,
+    Pipe,
 
     Ident(SmolStr),
     Int(SmolStr),
+    String(SmolStr),
 
-    Function,
+    Array,
+    If,
+    Then,
+    Else,
+    While,
+    For,
+    To,
+    Do,
+    Let,
+    In,
+    End,
+    Of,
+    Break,
     Nil,
+    Function,
     Var,
     Type,
+    Import,
+    Primitive,
 }
 
 impl Token {
@@ -52,7 +79,28 @@ impl Token {
 impl TokenKind {
     pub fn is_keyword(&self) -> bool {
         use TokenKind::*;
-        matches!(self, Function | Nil | Var | Type)
+        matches!(
+            self,
+            Array
+                | If
+                | Then
+                | Else
+                | While
+                | For
+                | To
+                | Do
+                | Let
+                | In
+                | End
+                | Of
+                | Break
+                | Nil
+                | Function
+                | Var
+                | Type
+                | Import
+                | Primitive
+        )
     }
 }
 
@@ -66,6 +114,11 @@ impl Display for TokenKind {
                 TokenKind::Unknown(c) => return c.fmt(f),
                 TokenKind::Dummy => "<dummy>",
                 TokenKind::Eq => "=",
+                TokenKind::Neq => "<>",
+                TokenKind::Lt => "<",
+                TokenKind::Lte => "<=",
+                TokenKind::Gt => ">",
+                TokenKind::Gte => ">=",
                 TokenKind::Assign => ":=",
                 TokenKind::LParen => "(",
                 TokenKind::RParen => ")",
@@ -77,13 +130,34 @@ impl Display for TokenKind {
                 TokenKind::Minus => "-",
                 TokenKind::Star => "*",
                 TokenKind::Slash => "/",
+                TokenKind::Comma => ",",
+                TokenKind::Dot => ".",
                 TokenKind::Colon => ":",
+                TokenKind::Semicolon => ";",
+                TokenKind::Ampersand => "&",
+                TokenKind::Pipe => "|",
                 TokenKind::Ident(id) => id.as_str(),
                 TokenKind::Int(n) => n.as_str(),
-                TokenKind::Function => "function",
+                TokenKind::String(s) => s.as_str(),
+                TokenKind::Array => "array",
+                TokenKind::If => "if",
+                TokenKind::Then => "then",
+                TokenKind::Else => "else",
+                TokenKind::While => "while",
+                TokenKind::For => "for",
+                TokenKind::To => "to",
+                TokenKind::Do => "do",
+                TokenKind::Let => "let",
+                TokenKind::In => "in",
+                TokenKind::End => "end",
+                TokenKind::Of => "of",
+                TokenKind::Break => "break",
                 TokenKind::Nil => "nil",
+                TokenKind::Function => "function",
                 TokenKind::Var => "var",
                 TokenKind::Type => "type",
+                TokenKind::Import => "import",
+                TokenKind::Primitive => "primitive",
             }
         )
     }
@@ -93,6 +167,21 @@ impl Display for TokenKind {
 macro_rules! T {
     (=) => {
         TokenKind::Eq
+    };
+    (<>) => {
+        TokenKind::Neq
+    };
+    (<) => {
+        TokenKind::Lt
+    };
+    (<=) => {
+        TokenKind::Lte
+    };
+    (>) => {
+        TokenKind::Gt
+    };
+    (>=) => {
+        TokenKind::Gte
     };
     (:=) => {
         TokenKind::Assign
@@ -130,8 +219,24 @@ macro_rules! T {
         TokenKind::Slash
     };
 
+    (,) => {
+        TokenKind::Comma
+    };
+    (.) => {
+        TokenKind::Dot
+    };
+    (;) => {
+        TokenKind::Semicolon
+    };
     (:) => {
         TokenKind::Colon
+    };
+
+    (&) => {
+        TokenKind::Ampersand
+    };
+    (|) => {
+        TokenKind::Pipe
     };
 
     (ident $id:expr) => {
@@ -140,17 +245,66 @@ macro_rules! T {
     (int $int:expr) => {
         TokenKind::Int($int.into())
     };
-    (function) => {
-        TokenKind::Function
+    (str $str:expr) => {
+        TokenKind::String($str.into())
+    };
+
+    (array) => {
+        TokenKind::Array
+    };
+    (if) => {
+        TokenKind::If
+    };
+    (then) => {
+        TokenKind::Then
+    };
+    (else) => {
+        TokenKind::Else
+    };
+    (while) => {
+        TokenKind::While
+    };
+    (for) => {
+        TokenKind::For
+    };
+    (to) => {
+        TokenKind::To
+    };
+    (do) => {
+        TokenKind::Do
+    };
+    (let) => {
+        TokenKind::Let
+    };
+    (in) => {
+        TokenKind::In
+    };
+    (end) => {
+        TokenKind::End
+    };
+    (of) => {
+        TokenKind::Of
+    };
+    (break) => {
+        TokenKind::Break
     };
     (nil) => {
         TokenKind::Nil
+    };
+    (function) => {
+        TokenKind::Function
     };
     (var) => {
         TokenKind::Var
     };
     (type) => {
         TokenKind::Type
+    };
+    (import) => {
+        TokenKind::Import
+    };
+    (primitive) => {
+        TokenKind::Primitive
     };
 
     (eof) => {

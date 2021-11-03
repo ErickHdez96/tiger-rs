@@ -1,23 +1,32 @@
 pub mod token;
 
+use crate::T;
 use std::{iter::from_fn, str::Chars};
 use tig_common::{SmolStr, Span};
 use token::{Token, TokenKind};
-use crate::T;
+
+#[derive(Debug)]
+struct Lexer<'a> {
+    chars: Chars<'a>,
+    offset: u32,
+}
 
 pub fn tokenize(input: impl AsRef<str>) -> Vec<Token> {
-    let mut chars = input.as_ref().chars();
-    let mut offset = 0u32;
+    let mut l = Lexer {
+        chars: input.as_ref().chars(),
+        offset: 0,
+    };
+    let l = &mut l;
 
     let mut tokens = from_fn(|| {
-        skip_whitespace(&mut chars, &mut offset);
-        let start = offset;
+        skip_whitespace(l);
+        let start = l.offset;
 
         macro_rules! mt {
-            ($chars:expr, $offset:expr, $res:expr, $(($mchar:expr, $mres:expr));+ $(;)?) => {
-                match peek_nth(&$chars, 1) {
+            ($l:expr, $res:expr, $(($mchar:expr, $mres:expr)),+ $(,)?) => {
+                match peek_nth(l, 1) {
                     $($mchar => {
-                        next_char(&mut $chars, &mut $offset);
+                        next_char($l);
                         $mres
                     }),+
                     _ => $res,
@@ -25,9 +34,11 @@ pub fn tokenize(input: impl AsRef<str>) -> Vec<Token> {
             };
         }
 
-        let kind = match peek_char(&chars) {
+        let kind = match peek_char(l) {
             '=' => T![=],
-            ':' => mt!(chars, offset, T![:], ('=', T![:=])),
+            '<' => mt!(l, T![<], ('>', T![<>]), ('=', T![<=])),
+            '>' => mt!(l, T![>], ('=', T![>=])),
+            ':' => mt!(l, T![:], ('=', T![:=])),
             '(' => T!['('],
             ')' => T![')'],
             '{' => T!['{'],
@@ -38,43 +49,64 @@ pub fn tokenize(input: impl AsRef<str>) -> Vec<Token> {
             '-' => T![-],
             '*' => T![*],
             '/' => T![/],
-            '\0' if at_eof(&chars) => return None,
+            ',' => T![,],
+            '.' => T![.],
+            ';' => T![;],
+            '&' => T![&],
+            '|' => T![|],
+            '"' => TokenKind::String(eat_string(l)),
+            '\0' if at_eof(l) => return None,
             c @ '_' => {
-                if peek_nth(&chars, 1) == 'm'
-                    && peek_nth(&chars, 2) == 'a'
-                    && peek_nth(&chars, 3) == 'i'
-                    && peek_nth(&chars, 4) == 'n'
+                if peek_nth(l, 1) == 'm'
+                    && peek_nth(l, 2) == 'a'
+                    && peek_nth(l, 3) == 'i'
+                    && peek_nth(l, 4) == 'n'
                 {
-                    chars.next();
-                    chars.next();
-                    chars.next();
-                    chars.next();
-                    chars.next();
-                    offset += 5;
+                    l.chars.next();
+                    l.chars.next();
+                    l.chars.next();
+                    l.chars.next();
+                    l.chars.next();
+                    l.offset += 5;
                     TokenKind::Ident("_main".into())
                 } else {
                     TokenKind::Unknown(c)
                 }
             }
-            c if c.is_ascii_digit() => TokenKind::Int(eat_int(&mut chars, &mut offset)),
+            c if c.is_ascii_digit() => TokenKind::Int(eat_int(l)),
             c if can_start_ident(c) => {
-                let ident = eat_ident(&mut chars, &mut offset);
+                let ident = eat_ident(l);
                 match ident.as_str() {
-                    "function" => T![function],
-                    "nil" => T![nil],
-                    "var" => T![var],
-                    "type" => T![type],
-                    _ => T![ident ident],
+                    "array" => TokenKind::Array,
+                    "if" => TokenKind::If,
+                    "then" => TokenKind::Then,
+                    "else" => TokenKind::Else,
+                    "while" => TokenKind::While,
+                    "for" => TokenKind::For,
+                    "to" => TokenKind::To,
+                    "do" => TokenKind::Do,
+                    "let" => TokenKind::Let,
+                    "in" => TokenKind::In,
+                    "end" => TokenKind::End,
+                    "of" => TokenKind::Of,
+                    "break" => TokenKind::Break,
+                    "nil" => TokenKind::Nil,
+                    "function" => TokenKind::Function,
+                    "var" => TokenKind::Var,
+                    "type" => TokenKind::Type,
+                    "import" => TokenKind::Import,
+                    "primitive" => TokenKind::Primitive,
+                    _ => TokenKind::Ident(ident),
                 }
             }
             c => TokenKind::Unknown(c),
         };
 
         if should_advance(&kind) {
-            next_char(&mut chars, &mut offset);
+            next_char(l);
         }
 
-        let end = offset;
+        let end = l.offset;
         Some(Token {
             span: Span::new(start, end),
             kind,
@@ -110,42 +142,42 @@ fn is_ident(c: char) -> bool {
 }
 
 /// Advance the input stream
-fn skip_whitespace(chars: &mut Chars, offset: &mut u32) {
-    while peek_char(chars).is_whitespace() {
-        next_char(chars, offset);
+fn skip_whitespace(l: &mut Lexer) {
+    while peek_char(l).is_whitespace() {
+        next_char(l);
     }
 }
 
 /// Gets the next character from the input stream and increments offset.
-fn next_char(chars: &mut Chars, offset: &mut u32) -> char {
-    let c = chars.next().unwrap_or('\0');
-    *offset += c.len_utf8() as u32;
+fn next_char(l: &mut Lexer) -> char {
+    let c = l.chars.next().unwrap_or('\0');
+    l.offset += c.len_utf8() as u32;
     c
 }
 
 /// Peeks the first character in the input stream.
 #[inline]
-fn peek_nth(chars: &Chars, n: usize) -> char {
-    chars.clone().nth(n).unwrap_or('\0')
+fn peek_nth(l: &Lexer, n: usize) -> char {
+    l.chars.clone().nth(n).unwrap_or('\0')
 }
 
 /// Peeks the first character in the input stream.
 #[inline]
-fn peek_char(chars: &Chars) -> char {
-    peek_nth(chars, 0)
+fn peek_char(l: &Lexer) -> char {
+    peek_nth(l, 0)
 }
 
 /// There are no more characters in the input stream.
-fn at_eof(chars: &Chars) -> bool {
-    chars.clone().next().is_none()
+fn at_eof(l: &Lexer) -> bool {
+    l.chars.clone().next().is_none()
 }
 
-fn eat_while<F: Fn(char) -> bool>(chars: &mut Chars, offset: &mut u32, test: F) -> SmolStr {
-    let iter = chars.clone();
+fn eat_while<F: Fn(char) -> bool>(l: &mut Lexer, test: F) -> SmolStr {
+    let iter = l.chars.clone();
     let mut count = 0;
 
-    while test(peek_char(chars)) {
-        next_char(chars, offset);
+    while test(peek_char(l)) {
+        next_char(l);
         count += 1;
     }
 
@@ -156,23 +188,57 @@ fn eat_while<F: Fn(char) -> bool>(chars: &mut Chars, offset: &mut u32, test: F) 
 ///
 /// # Assumptions
 ///  * The first character can start an identifier.
-fn eat_ident(chars: &mut Chars, offset: &mut u32) -> SmolStr {
-    eat_while(chars, offset, is_ident)
+fn eat_ident(l: &mut Lexer) -> SmolStr {
+    eat_while(l, is_ident)
 }
 
 /// Consume an integer from the input stream.
 ///
 /// # Assumptions
 ///  * The first character is an ascii digit.
-fn eat_int(chars: &mut Chars, offset: &mut u32) -> SmolStr {
-    eat_while(chars, offset, |c| c.is_ascii_digit())
+fn eat_int(l: &mut Lexer) -> SmolStr {
+    eat_while(l, |c| c.is_ascii_digit())
+}
+
+/// Consume a string from the input stream.
+///
+/// # Assumptions
+///  * The first character is an ascii digit.
+fn eat_string(l: &mut Lexer) -> SmolStr {
+    let iter = l.chars.clone();
+    next_char(l);
+    let mut count = 1;
+
+    loop {
+        match peek_char(l) {
+            '"' => {
+                next_char(l);
+                count += 1;
+                break;
+            }
+            // TODO: Signal an error
+            '\0' => break,
+            '\\' => {
+                // TODO: Handle EOF after \
+                // TODO: Handle multicharacer escape sequences
+                next_char(l);
+                count += 1;
+                break;
+            }
+            _ => {}
+        }
+        next_char(l);
+        count += 1;
+    }
+
+    SmolStr::new(iter.take(count).collect::<String>())
 }
 
 /// Returns whether the lexer should consume the next character in the input stream, or it has
 /// already been consumed.
 fn should_advance(kind: &TokenKind) -> bool {
     use TokenKind::*;
-    !(matches!(kind, Ident(_) | Int(_)) || kind.is_keyword())
+    !(matches!(kind, Ident(_) | Int(_) | String(_)) || kind.is_keyword())
 }
 
 #[cfg(test)]
@@ -196,7 +262,7 @@ mod tests {
     #[test]
     fn test_single_tokens() {
         check(
-            "(){}[]+-*/:",
+            "(){}[]+-*/,.:;=<&|>",
             &[
                 tok!(T!['('], 0, 1),
                 tok!(T![')'], 1, 2),
@@ -208,15 +274,32 @@ mod tests {
                 tok!(T![-], 7, 8),
                 tok!(T![*], 8, 9),
                 tok!(T![/], 9, 10),
-                tok!(T![:], 10, 11),
-                tok!(T![eof], 10, 11),
+                tok!(T![,], 10, 11),
+                tok!(T![.], 11, 12),
+                tok!(T![:], 12, 13),
+                tok!(T![;], 13, 14),
+                tok!(T![=], 14, 15),
+                tok!(T![<], 15, 16),
+                tok!(T![&], 16, 17),
+                tok!(T![|], 17, 18),
+                tok!(T![>], 18, 19),
+                tok!(T![eof], 18, 19),
             ],
         );
     }
 
     #[test]
     fn test_multi_tokens() {
-        check(":=", &[tok!(T![:=], 0, 2), tok!(T![eof], 1, 2)]);
+        check(
+            ":= <> <= >=",
+            &[
+                tok!(T![:=], 0, 2),
+                tok!(T![<>], 3, 5),
+                tok!(T![<=], 6, 8),
+                tok!(T![>=], 9, 11),
+                tok!(T![eof], 10, 11),
+            ],
+        );
     }
 
     #[test]
@@ -244,16 +327,42 @@ mod tests {
     }
 
     #[test]
+    fn test_strings() {
+        check(
+            r#""Hello, world!""#,
+            &[
+                tok!(T![str "\"Hello, world!\""], 0, 15),
+                tok!(T![eof], 14, 15),
+            ],
+        );
+    }
+
+    #[test]
     fn test_keywords() {
         check(
-            "function nil _main var type",
+            "array if then else while for to do let in end of break nil function var type import primitive _main",
             &[
-                tok!(T![function], 0, 8),
-                tok!(T![nil], 9, 12),
-                tok!(T![ident "_main"], 13, 18),
-                tok!(T![var], 19, 22),
-                tok!(T![type], 23, 27),
-                tok!(T![eof], 26, 27),
+            tok!(T![array], 0, 5),
+            tok!(T![if], 6, 8),
+            tok!(T![then], 9, 13),
+            tok!(T![else], 14, 18),
+            tok!(T![while], 19, 24),
+            tok!(T![for], 25, 28),
+            tok!(T![to], 29, 31),
+            tok!(T![do], 32, 34),
+            tok!(T![let], 35, 38),
+            tok!(T![in], 39, 41),
+            tok!(T![end], 42, 45),
+            tok!(T![of], 46, 48),
+            tok!(T![break], 49, 54),
+            tok!(T![nil], 55, 58),
+            tok!(T![function], 59, 67),
+            tok!(T![var], 68, 71),
+            tok!(T![type], 72, 76),
+            tok!(T![import], 77, 83),
+            tok!(T![primitive], 84, 93),
+            tok!(T![ident "_main"], 94, 99),
+            tok!(T![eof], 98, 99),
             ],
         );
     }

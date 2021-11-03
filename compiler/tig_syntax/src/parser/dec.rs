@@ -1,6 +1,6 @@
 use super::*;
-use tig_ast::ast;
 use crate::T;
+use tig_ast::ast;
 
 #[derive(Debug)]
 enum DecKind {

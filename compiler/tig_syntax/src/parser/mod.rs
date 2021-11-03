@@ -2,11 +2,11 @@ mod dec;
 mod expr;
 mod ty;
 
+use crate::{tokenize, Token, TokenKind};
 use tig_ast as ast;
 use tig_ast::ast;
 use tig_common::Span;
 use tig_error::{SError, SpannedError};
-use crate::{tokenize, Token, TokenKind};
 
 type PResult<T> = Result<T, SpannedError>;
 
@@ -129,7 +129,10 @@ impl Parser {
 /// Test whether a token can appear at the start of an expression.
 fn can_start_expr(kind: &TokenKind) -> bool {
     use TokenKind::*;
-    matches!(kind, Nil)
+    matches!(
+        kind,
+        Nil | Int(_) | String(_) | Ident(_) | Minus | LParen | If | While | For | Break | Let
+    )
 }
 
 /// Test whether a token can appear at the start of a declaration.

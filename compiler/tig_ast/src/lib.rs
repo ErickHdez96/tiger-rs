@@ -7,16 +7,16 @@ pub enum Program {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Var {
+pub struct LValue {
     pub span: Span,
-    pub kind: VarKind,
+    pub kind: LValueKind,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum VarKind {
+pub enum LValueKind {
     Simple(SmolStr),
-    //Field(Box<Var>, SmolStr),
-    //Subscript(Box<Var>, Box<Expr>),
+    Field(Box<LValue>, Ident),
+    Subscript(Box<LValue>, Box<Expr>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -28,53 +28,54 @@ pub struct Expr {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExprKind {
     Nil,
-    Var(Var),
+    LValue(LValue),
     Int(u64),
-    //String(SmolStr),
-    //Call {
-    //    func: Ident,
-    //    args: Vec<Expr>,
-    //},
+    String(SmolStr),
+    Paren(Box<Expr>),
+    Call {
+        func: Ident,
+        args: Vec<Expr>,
+    },
     BinOp {
         op: BinOp,
         left: Box<Expr>,
         right: Box<Expr>,
     },
-    //Record {
-    //    fields: Vec<FieldExpr>,
-    //    ty: Ident,
-    //},
-    //Seq(Vec<Expr>),
-    //Assign {
-    //    var: Var,
-    //    expr: Box<Expr>,
-    //},
-    //If {
-    //    test: Box<Expr>,
-    //    then_branch: Box<Expr>,
-    //    else_branch: Option<Box<Expr>>,
-    //},
-    //While {
-    //    test: Box<Expr>,
-    //    body: Box<Expr>,
-    //},
-    //For {
-    //    var: Ident,
-    //    escape: bool,
-    //    lo: Box<Expr>,
-    //    hi: Box<Expr>,
-    //    body: Box<Expr>,
-    //},
-    //Break,
-    //Let {
-    //    decs: Vec<Dec>,
-    //    body: Box<Expr>,
-    //},
-    //Array {
-    //    ty: Ident,
-    //    size: Box<Expr>,
-    //    init: Box<Expr>,
-    //},
+    Record {
+        fields: Vec<FieldExpr>,
+        ty: Ident,
+    },
+    Seq(Vec<Expr>),
+    Assign {
+        var: LValue,
+        expr: Box<Expr>,
+    },
+    If {
+        test: Box<Expr>,
+        then_branch: Box<Expr>,
+        else_branch: Option<Box<Expr>>,
+    },
+    While {
+        test: Box<Expr>,
+        body: Box<Expr>,
+    },
+    For {
+        var: Ident,
+        escape: bool,
+        lo: Box<Expr>,
+        hi: Box<Expr>,
+        body: Box<Expr>,
+    },
+    Break,
+    Let {
+        decs: Vec<Dec>,
+        body: Box<Expr>,
+    },
+    Array {
+        ty: Ident,
+        size: Box<Expr>,
+        init: Box<Expr>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -150,20 +151,43 @@ pub enum BinOp {
     Sub,
     Mul,
     Div,
-    //Eq,
-    //Neq,
-    //Lt,
-    //Lte,
-    //Gt,
-    //Gte,
+    Eq,
+    Neq,
+    Lt,
+    Lte,
+    Gt,
+    Gte,
+    And,
+    Or,
 }
 
 #[macro_export]
 macro_rules! ast {
-    (var, simple, $span:expr, $var:expr $(,)?) => {
-        tig_ast::Var {
+    (lvalue, simple, $span:expr, $lvalue:expr $(,)?) => {
+        tig_ast::LValue {
             span: $span,
-            kind: tig_ast::VarKind::Simple($var.into()),
+            kind: tig_ast::LValueKind::Simple($lvalue.into()),
+        }
+    };
+
+    (lvalue, field, $span:expr, $lvalue:expr, $field:expr $(,)?) => {
+        tig_ast::LValue {
+            span: $span,
+            kind: tig_ast::LValueKind::Field(Box::new($lvalue), $field),
+        }
+    };
+
+    (lvalue, subscript, $span:expr, $lvalue:expr, $index:expr $(,)?) => {
+        tig_ast::LValue {
+            span: $span,
+            kind: tig_ast::LValueKind::Subscript(Box::new($lvalue), Box::new($index)),
+        }
+    };
+
+    (lvalue, subscript, $span:expr, $lvalue:expr, $index:expr $(,)?) => {
+        tig_ast::LValue {
+            span: $span,
+            kind: tig_ast::LValueKind::Subscript(Box::new($lvalue), Box::new($index)),
         }
     };
 
@@ -174,10 +198,10 @@ macro_rules! ast {
         }
     };
 
-    (expr, var, $span:expr, $var:expr $(,)?) => {
+    (expr, lvalue, $span:expr, $lvalue:expr $(,)?) => {
         tig_ast::Expr {
             span: $span,
-            kind: tig_ast::ExprKind::Var(ast! {var, simple, $span, $var}),
+            kind: tig_ast::ExprKind::LValue($lvalue),
         }
     };
 
@@ -188,6 +212,126 @@ macro_rules! ast {
         }
     };
 
+    (expr, str, $span:expr, $str:expr $(,)?) => {
+        tig_ast::Expr {
+            span: $span,
+            kind: tig_ast::ExprKind::String($str.into()),
+        }
+    };
+
+    (expr, paren, $span:expr, $expr:expr $(,)?) => {
+        tig_ast::Expr {
+            span: $span,
+            kind: tig_ast::ExprKind::Paren(Box::new($expr)),
+        }
+    };
+
+    (expr, seq, $span:expr, $exprs:expr $(,)?) => {
+        tig_ast::Expr {
+            span: $span,
+            kind: tig_ast::ExprKind::Seq($exprs),
+        }
+    };
+
+    (expr, array, $span:expr, $ty:expr, $size:expr, $init:expr $(,)?) => {
+        tig_ast::Expr {
+            span: $span,
+            kind: tig_ast::ExprKind::Array {
+                ty: $ty,
+                size: Box::new($size),
+                init: Box::new($init),
+            },
+        }
+    };
+
+    (expr, record, $span:expr, $ty:expr, { $($field:expr => $expr:expr),* $(,)? } $(,)?) => {
+        tig_ast::Expr {
+            span: $span,
+            kind: tig_ast::ExprKind::Record {
+                ty: $ty,
+                fields: vec![
+                    $(ast::FieldExpr {
+                        field: $field,
+                        expr: $expr,
+                    }),*
+                ],
+            },
+        }
+    };
+
+    (expr, fn, $span:expr, $fn:expr, $args:expr $(,)?) => {
+        tig_ast::Expr {
+            span: $span,
+            kind: tig_ast::ExprKind::Call {
+                func: $fn,
+                args: $args,
+            },
+        }
+    };
+
+    (expr, if, $span:expr, $test:expr, $then_branch:expr $(,)?) => {
+        tig_ast::Expr {
+            span: $span,
+            kind: tig_ast::ExprKind::If {
+                test: Box::new($test),
+                then_branch: Box::new($then_branch),
+                else_branch: None,
+            },
+        }
+    };
+
+    (expr, ife, $span:expr, $test:expr, $then_branch:expr, $else_branch:expr $(,)?) => {
+        tig_ast::Expr {
+            span: $span,
+            kind: tig_ast::ExprKind::If {
+                test: Box::new($test),
+                then_branch: Box::new($then_branch),
+                else_branch: Some(Box::new($else_branch)),
+            },
+        }
+    };
+
+    (expr, while, $span:expr, $test:expr, $body:expr $(,)?) => {
+        tig_ast::Expr {
+            span: $span,
+            kind: tig_ast::ExprKind::While {
+                test: Box::new($test),
+                body: Box::new($body),
+            },
+        }
+    };
+
+    (expr, for, $span:expr, $id:expr, $lo:expr, $hi:expr, $body:expr $(,)?) => {
+        tig_ast::Expr {
+            span: $span,
+            kind: tig_ast::ExprKind::For {
+                var: $id,
+                escape: false,
+                lo: Box::new($lo),
+                hi: Box::new($hi),
+                body: Box::new($body),
+            },
+        }
+    };
+
+    (expr, break, $span:expr $(,)?) => {
+        tig_ast::Expr {
+            span: $span,
+            kind: tig_ast::ExprKind::Break,
+        }
+    };
+
+    (expr, array, $span:expr, $ty:expr, $size:expr, $init:expr $(,)?) => {
+        tig_ast::Expr {
+            span: $span,
+            kind: tig_ast::ExprKind::Array {
+                ty: $ty,
+                size: Box::new($size),
+                init: Box::new($init),
+            },
+        }
+    };
+
     (expr, binop, $span:expr, $binop:expr, $left:expr, $right:expr $(,)?) => {
         tig_ast::Expr {
             span: $span,
@@ -195,6 +339,26 @@ macro_rules! ast {
                 op: $binop,
                 left: Box::new($left),
                 right: Box::new($right),
+            },
+        }
+    };
+
+    (expr, assign, $span:expr, $lvalue:expr, $expr:expr $(,)?) => {
+        tig_ast::Expr {
+            span: $span,
+            kind: tig_ast::ExprKind::Assign {
+                var: $lvalue,
+                expr: Box::new($expr),
+            },
+        }
+    };
+
+    (expr, let, $span:expr, $decs:expr, $expr:expr $(,)?) => {
+        tig_ast::Expr {
+            span: $span,
+            kind: tig_ast::ExprKind::Let {
+                decs: $decs,
+                body: Box::new($expr),
             },
         }
     };
@@ -273,5 +437,29 @@ macro_rules! binop {
     };
     (/) => {
         tig_ast::BinOp::Div
+    };
+    (=) => {
+        tig_ast::BinOp::Eq
+    };
+    (<>) => {
+        tig_ast::BinOp::Neq
+    };
+    (<) => {
+        tig_ast::BinOp::Lt
+    };
+    (<=) => {
+        tig_ast::BinOp::Lte
+    };
+    (>) => {
+        tig_ast::BinOp::Gt
+    };
+    (>=) => {
+        tig_ast::BinOp::Gte
+    };
+    (&) => {
+        tig_ast::BinOp::And
+    };
+    (|) => {
+        tig_ast::BinOp::Or
     };
 }
