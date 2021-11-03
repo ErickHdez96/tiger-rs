@@ -5,7 +5,7 @@ mod ty;
 use crate::{tokenize, Token, TokenKind};
 use tig_ast as ast;
 use tig_ast::ast;
-use tig_common::Span;
+use tig_common::{SmolStr, Span};
 use tig_error::{SError, SpannedError};
 
 type PResult<T> = Result<T, SpannedError>;
@@ -116,6 +116,16 @@ impl Parser {
         }
     }
 
+    fn eat_string(&mut self) -> PResult<(Span, SmolStr)> {
+        match self.next() {
+            Token {
+                span,
+                kind: TokenKind::String(s),
+            } => Ok((span, s)),
+            Token { span, kind } => Err(SError!(span, "Expected a string, found `{}`", kind)),
+        }
+    }
+
     fn eat(&mut self, kind: &TokenKind) -> PResult<Token> {
         let t = self.next();
         if &t.kind == kind {
@@ -138,5 +148,5 @@ fn can_start_expr(kind: &TokenKind) -> bool {
 /// Test whether a token can appear at the start of a declaration.
 fn can_start_dec(kind: &TokenKind) -> bool {
     use TokenKind::*;
-    matches!(kind, Function | Var | Type | Primitive)
+    matches!(kind, Function | Var | Type | Primitive | Import)
 }

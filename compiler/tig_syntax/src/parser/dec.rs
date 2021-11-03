@@ -1,6 +1,7 @@
 use super::*;
 use crate::T;
 use tig_ast::ast;
+use tig_common::SmolStr;
 
 // x - Implemented
 // - - Incomplete
@@ -40,6 +41,7 @@ enum DecKind {
     F(ast::Fundec),
     V(ast::Vardec),
     P(ast::Primitivedec),
+    I(SmolStr),
     T(ast::Typedec),
 }
 
@@ -71,7 +73,7 @@ impl Parser {
                     }
                     f_decs.push(fdec);
                 }
-                DecKind::V(_) | DecKind::P(_) => {
+                DecKind::V(_) | DecKind::P(_) | DecKind::I(_) => {
                     if !f_decs.is_empty() {
                         decs.push(
                             ast!{dec, fn, start_span.extend(last_span), std::mem::take(&mut f_decs)}
@@ -89,6 +91,9 @@ impl Parser {
                         }
                         DecKind::P(odec) => {
                             decs.push(ast! {dec, primitive, decspan, odec});
+                        }
+                        DecKind::I(import) => {
+                            decs.push(ast! {dec, import, decspan, import});
                         }
                         _ => {
                             unreachable!()
@@ -128,6 +133,11 @@ impl Parser {
             T![primitive] => self.parse_primitivedec(),
             T![var] => self.parse_vardec(),
             T![type] => self.parse_typedec(),
+            T![import] => {
+                let start = self.next().span;
+                let (end_span, import) = self.eat_string()?;
+                Ok((start.extend(end_span), DecKind::I(import)))
+            }
             _ => Err(SError!(
                 t.span,
                 "Expected function, primitive, var or type, found `{}`",
@@ -367,6 +377,17 @@ mod tests {
                         ast!{type, name, span!(9, 12), ast!{ident, span!(9, 12), "int"}},
                     },
                 ]
+            }],
+        );
+    }
+
+    #[test]
+    fn parses_import() {
+        check(
+            "import \"std\"",
+            &[ast! {
+                dec, import, span!(0, 12),
+                "\"std\"",
             }],
         );
     }

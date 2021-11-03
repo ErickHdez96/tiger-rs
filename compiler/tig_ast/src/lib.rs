@@ -90,6 +90,7 @@ pub enum DecKind {
     Var(Vardec),
     Type(Vec<Typedec>),
     Primitive(Primitivedec),
+    Import(SmolStr),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -399,10 +400,37 @@ macro_rules! ast {
         }
     };
 
+    (dec, import, $span:expr, $import:expr $(,)?) => {
+        tig_ast::Dec {
+            span: $span,
+            kind: tig_ast::DecKind::Import($import.into()),
+        }
+    };
+
     (type, name, $span:expr, $id:expr $(,)?) => {
         tig_ast::Type {
             span: $span,
             kind: tig_ast::TypeKind::Name($id),
+        }
+    };
+
+    (type, record, $span:expr, { $($field:expr => $ty:expr),* $(,)? } $(,)?) => {
+        tig_ast::Type {
+            span: $span,
+            kind: tig_ast::TypeKind::Record(vec![
+                $(ast::Field {
+                    field: $field,
+                    escape: false,
+                    ty: $ty
+                }),*
+            ]),
+        }
+    };
+
+    (type, array, $span:expr, $ty:expr $(,)?) => {
+        tig_ast::Type {
+            span: $span,
+            kind: tig_ast::TypeKind::Array($ty),
         }
     };
 
