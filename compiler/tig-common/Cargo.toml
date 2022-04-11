@@ -1,0 +1,7 @@
+[package]
+name = "tig-common"
+version = "0.1.0"
+edition = "2021"
+authors = ["Erick Hernandez Curiel <erick@hernandezcuriel.dev>"]
+
+[dependencies]
