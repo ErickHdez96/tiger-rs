@@ -3,7 +3,7 @@ use std::{fmt, iter};
 
 use crate::T;
 use smol_str::SmolStr;
-use tig_common::Span;
+use tig_common::{SourceFile, Span};
 
 /// The result of tokenizing an input string.
 ///
@@ -44,6 +44,12 @@ impl LexerResult {
 /// The only error is possibly an unterminated comment.
 pub fn tokenize(input: &str) -> LexerResult {
     tokenize_with_offset(input, 0)
+}
+
+/// Same as `tokenize`.
+pub fn tokenize_source_file(file: &SourceFile) -> LexerResult {
+    assert!(file.offset() < (u32::MAX as usize));
+    tokenize_with_offset(file.content(), file.offset() as u32)
 }
 
 /// Same as `tokenize`, but allows to start at an arbitrary offset, useful when compiling multiple
@@ -190,7 +196,7 @@ fn skip_trivia(l: &mut Lexer) {
 }
 
 fn eat_comment(l: &mut Lexer) {
-    let start = dbg!(l.offset);
+    let start = l.offset;
     next(l);
     next(l);
 
@@ -205,12 +211,12 @@ fn eat_comment(l: &mut Lexer) {
                 break;
             }
             '\0' => {
-                if dbg!(l.unterminated_comment).is_some() {
+                if l.unterminated_comment.is_some() {
                     break;
                 }
                 // It doesn't matter if we stop lexing early, we have already reached the end
                 // of the input, it will terminate on its own.
-                l.unterminated_comment = Some(Span::new(dbg!(start), l.offset));
+                l.unterminated_comment = Some(Span::new(start, l.offset));
                 break;
             }
             _ => {
@@ -302,6 +308,21 @@ pub struct Token {
     pub kind: TokenKind,
 }
 
+impl Token {
+    pub fn dummy() -> Self {
+        Token {
+            span: Span::new(0, 0),
+            kind: T![dummy],
+        }
+    }
+}
+
+impl Default for Token {
+    fn default() -> Self {
+        Self::dummy()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TokenKind {
     /// ,
@@ -390,7 +411,81 @@ pub enum TokenKind {
 
     /// <eof>
     Eof,
+    Dummy,
     Unknown(char),
+}
+
+impl TokenKind {
+    pub fn to_kind_string(&self) -> String {
+        match self {
+            TokenKind::Id(_) => "identifier".to_string(),
+            TokenKind::Integer(_) => "integer".to_string(),
+            TokenKind::String { .. } => "string".to_string(),
+            _ => self.to_string(),
+        }
+    }
+}
+
+impl fmt::Display for TokenKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                TokenKind::Comma => ",",
+                TokenKind::Colon => ":",
+                TokenKind::Semicolon => ";",
+                TokenKind::Period => ".",
+                TokenKind::Plus => "+",
+                TokenKind::Minus => "-",
+                TokenKind::Star => "*",
+                TokenKind::Slash => "/",
+                TokenKind::Eq => "=",
+                TokenKind::Lt => "<",
+                TokenKind::Gt => ">",
+                TokenKind::Amp => "&",
+                TokenKind::Pipe => "|",
+                TokenKind::Neq => "<>",
+                TokenKind::Lte => "<=",
+                TokenKind::Gte => ">=",
+                TokenKind::Assign => ":=",
+                TokenKind::LParen => "(",
+                TokenKind::RParen => ")",
+                TokenKind::LBrace => "{",
+                TokenKind::RBrace => "}",
+                TokenKind::LBracket => "[",
+                TokenKind::RBracket => "]",
+                TokenKind::Main => "_main",
+                TokenKind::Id(s) | TokenKind::Integer(s) | TokenKind::String { value: s, .. } =>
+                    return write!(f, "{}", s),
+                TokenKind::Array => "array",
+                TokenKind::If => "if",
+                TokenKind::Then => "then",
+                TokenKind::Else => "else",
+                TokenKind::While => "while",
+                TokenKind::For => "for",
+                TokenKind::To => "to",
+                TokenKind::Do => "do",
+                TokenKind::Let => "let",
+                TokenKind::In => "in",
+                TokenKind::End => "end",
+                TokenKind::Of => "of",
+                TokenKind::Break => "break",
+                TokenKind::Nil => "nil",
+                TokenKind::Function => "function",
+                TokenKind::Var => "var",
+                TokenKind::Type => "type",
+                TokenKind::Import => "import",
+                TokenKind::Primitive => "primitive",
+                TokenKind::Class => "class",
+                TokenKind::Extends => "extends",
+                TokenKind::New => "new",
+                TokenKind::Eof => "<eof>",
+                TokenKind::Dummy => "<dummy>",
+                TokenKind::Unknown(c) => return write!(f, "{}", c),
+            }
+        )
+    }
 }
 
 #[cfg(test)]
@@ -515,11 +610,10 @@ mod tests {
     fn test_comments() {
         let input = "/* Comment 1 /* 2 */ 1 */";
         let tokens = tokenize(input).tokens().unwrap();
-        let expected = vec![tok!(0, 1, T![eof])];
+        let expected = vec![
+            tok!(0, 1, T![eof]),
+        ];
 
-        for (t, e) in tokens.iter().zip(expected.iter()) {
-            assert_eq!(t, e);
-        }
         assert_eq!(tokens.len(), expected.len());
     }
 
@@ -561,6 +655,9 @@ mod tests {
 macro_rules! T {
     (eof) => {
         TokenKind::Eof
+    };
+    (dummy) => {
+        TokenKind::Dummy
     };
     (_main) => {
         TokenKind::Main

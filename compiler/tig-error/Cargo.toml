@@ -1,14 +1,8 @@
 [package]
-name = "tig-syntax"
+name = "tig-error"
 version = "0.1.0"
 edition = "2021"
 authors = ["Erick Hernandez Curiel <erick@hernandezcuriel.dev>"]
 
 [dependencies]
-smol_str = "0.1"
 tig-common = { path = "../tig-common" }
-tig-error = { path = "../tig-error" }
-
-[dev-dependencies]
-tempfile = "3"
-expect-test = "1"
