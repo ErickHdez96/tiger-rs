@@ -1,8 +1,6 @@
-#![allow(unused_variables)]
 use core::fmt;
 
-use smol_str::SmolStr;
-use tig_common::Span;
+use tig_common::{SmolStr, Span};
 
 #[derive(Clone, PartialEq, Eq)]
 pub enum Program {
@@ -334,10 +332,10 @@ impl fmt::Debug for Expr {
                 ExprKind::Break => {
                     write!(f, "{}{}..{}: Break", padding, self.span.lo, self.span.hi)
                 }
-                ExprKind::Let { decs, exprs } => write!(
+                ExprKind::Let { decs, expr } => write!(
                     f,
                     "{}{}..{}: Let{}\n\
-                     {}{}..{}: Exprs\n{}",
+                     {}{}..{}: Expr\n{:#width$?}",
                     padding,
                     self.span.lo,
                     self.span.hi,
@@ -356,13 +354,10 @@ impl fmt::Debug for Expr {
                         "".to_string()
                     },
                     " ".repeat(width + 2),
-                    exprs.iter().next().map(|e| e.span.lo).unwrap_or_default(),
-                    exprs.iter().last().map(|e| e.span.hi).unwrap_or_default(),
-                    exprs
-                        .iter()
-                        .map(|e| format!("{:#width$?}", e, width = width + 4))
-                        .collect::<Vec<_>>()
-                        .join("\n")
+                    expr.span.lo,
+                    expr.span.hi,
+                    expr,
+                    width = width + 4
                 ),
             }
         } else {
@@ -443,7 +438,7 @@ pub enum ExprKind {
     Break,
     Let {
         decs: Vec<Dec>,
-        exprs: Vec<Expr>,
+        expr: Box<Expr>,
     },
 }
 
@@ -956,7 +951,7 @@ impl fmt::Debug for Type {
                     write!(
                         f,
                         "{}{}..{}: TypeArray({})",
-                        padding, self.span.lo, self.span.hi, id,
+                        padding, self.span.lo, self.span.hi, id.value,
                     )
                 }
             }
@@ -973,7 +968,7 @@ impl fmt::Debug for Type {
 pub enum TypeKind {
     Id(SmolStr),
     Record(Vec<TyField>),
-    Array(SmolStr),
+    Array(Ident),
     // Class definition
     // Class { extends: Option<Ident>, fields: Vec<ClassField> },
 }

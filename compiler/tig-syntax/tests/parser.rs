@@ -76,12 +76,14 @@ fn test_parser_import() {
                     134..135: Ident(b)
                   138..141: Type
                     138..141: TypeId(int)
-            165..177: Exprs
-              165..177: Call
-                165..174: Func(factorial)
-                175..176: Arguments
-                  175..176: LValue
-                    175..176: Ident(a)
+            165..177: Expr
+              165..177: Exprs
+                165..177: Expr
+                  165..177: Call
+                    165..174: Func(factorial)
+                    175..176: Arguments
+                      175..176: LValue
+                        175..176: Ident(a)
     "#]];
     expected.assert_debug_eq(&result.program.expect("should have compiled"));
 }

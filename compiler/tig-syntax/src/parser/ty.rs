@@ -46,7 +46,7 @@ impl<'s> Parser<'s> {
 
                 Ok(ast::Type {
                     span: span.extend(ty.span),
-                    kind: ast::TypeKind::Array(ty.value),
+                    kind: ast::TypeKind::Array(ty),
                 })
             }
 

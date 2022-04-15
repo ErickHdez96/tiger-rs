@@ -4,9 +4,8 @@ mod ty;
 
 use std::{collections::HashSet, io, path::PathBuf};
 
-use smol_str::SmolStr;
-use tig_common::{SourceCode, SourceFile, Span};
-use tig_error::ParserError;
+use tig_common::{SmolStr, SourceCode, SourceFile, Span};
+use tig_error::SpannedError;
 
 use crate::{
     ast::{self, Program},
@@ -63,7 +62,7 @@ pub fn parse_str(input: impl Into<String>) -> (SourceCode, ParseResult) {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParseResult {
     pub program: Option<Program>,
-    pub errors: Vec<ParserError>,
+    pub errors: Vec<SpannedError>,
 }
 
 /// A global parser for a whole Tiger's program. Files can be added one after the other, in which
@@ -78,7 +77,7 @@ pub struct ParseResult {
 #[derive(Debug)]
 struct Parser<'s> {
     source_code: &'s mut SourceCode,
-    errors: Vec<ParserError>,
+    errors: Vec<SpannedError>,
     tokens: TokenStream,
 
     /// When calling a maybe_expect, the expected token will be pushed here if it didn't match.  
@@ -115,7 +114,7 @@ impl<'s> Parser<'s> {
 
             if let Some(span) = unterminated_comment {
                 self.errors
-                    .push(ParserError::new("Unterminated comment", span));
+                    .push(SpannedError::new("Unterminated comment", span));
             }
         }
     }
@@ -236,7 +235,7 @@ impl<'s> Parser<'s> {
                 let value = value.clone(); // SmolStr clone is O(1)
                 if !terminated {
                     self.errors
-                        .push(ParserError::new("Unterminated string".to_string(), span));
+                        .push(SpannedError::new("Unterminated string".to_string(), span));
                 }
                 self.next();
 
@@ -260,7 +259,7 @@ impl<'s> Parser<'s> {
             .map(|e| e.to_kind_string())
             .collect::<Vec<_>>();
         tokens.sort();
-        let error = ParserError::new(
+        let error = SpannedError::new(
             format!(
                 "Expected one of '{}', got '{}'",
                 tokens.join(", "),
@@ -276,7 +275,7 @@ impl<'s> Parser<'s> {
     fn expected_one(&mut self, expected: &TokenKind) {
         if self.expected.is_empty() {
             let got = self.peek();
-            let error = ParserError::new(
+            let error = SpannedError::new(
                 format!(
                     "Expected '{}', got '{}'",
                     expected.to_kind_string(),
@@ -397,7 +396,7 @@ impl<'s> Parser<'s> {
                             let n = match u8::from_str_radix(&escape_sequence, 16) {
                                 Ok(n) => n as u8,
                                 Err(e) => {
-                                    self.errors.push(ParserError::new(
+                                    self.errors.push(SpannedError::new(
                                         format!(
                                             "Could not parse hex escape sequence '{}' - {}",
                                             escape_sequence, e,
@@ -416,7 +415,7 @@ impl<'s> Parser<'s> {
                             let n = match u8::from_str_radix(&escape_sequence, 8) {
                                 Ok(n) => n,
                                 Err(e) => {
-                                    self.errors.push(ParserError::new(
+                                    self.errors.push(SpannedError::new(
                                         format!(
                                             "Could not parse octal escape sequence '{}' - {}",
                                             escape_sequence, e,
@@ -430,7 +429,7 @@ impl<'s> Parser<'s> {
                         }
                         Some(c) => {
                             offset += 1 + c.len_utf8() as u32;
-                            self.errors.push(ParserError::new(
+                            self.errors.push(SpannedError::new(
                                 format!("Unexpected escape character '{}'", c),
                                 Span::new(current + 1, current + c.len_utf8() as u32),
                             ));
@@ -622,9 +621,11 @@ mod tests {
                                   313..314: Ident(d)
                                 317..323: Type
                                   317..323: TypeId(string)
-                          363..368: Exprs
-                            363..368: Call
-                              363..366: Func(one)
+                          363..368: Expr
+                            363..368: Exprs
+                              363..368: Expr
+                                363..368: Call
+                                  363..366: Func(one)
             "#]],
         );
     }

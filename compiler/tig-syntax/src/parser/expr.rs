@@ -1,4 +1,5 @@
-use tig_error::ParserError;
+use tig_common::Span;
+use tig_error::SpannedError;
 
 use crate::{
     ast,
@@ -95,7 +96,7 @@ impl<'s> Parser<'s> {
                 let n: isize = match n.parse() {
                     Ok(n) => n,
                     Err(_) => {
-                        let error = ParserError::new(
+                        let error = SpannedError::new(
                             format!(
                                 "Literal out of range for integer, maximum number allowed is {}",
                                 isize::MAX,
@@ -126,7 +127,7 @@ impl<'s> Parser<'s> {
                 let span = *span;
                 if !terminated {
                     self.errors
-                        .push(ParserError::new("Unterminatd string", span));
+                        .push(SpannedError::new("Unterminatd string", span));
                 }
                 self.next();
                 let s = self.parse_string(s, span)?;
@@ -189,7 +190,7 @@ impl<'s> Parser<'s> {
             // TODO: String
             Token { kind, span } => {
                 let error =
-                    ParserError::new(format!("Expected an expression, got '{}'", kind,), *span);
+                    SpannedError::new(format!("Expected an expression, got '{}'", kind,), *span);
                 self.errors.push(error);
                 Err(())
             }
@@ -379,10 +380,14 @@ impl<'s> Parser<'s> {
         let decs = self.parse_decs(&T![in])?;
         self.expect(&T![in])?;
         let mut exprs = vec![];
-        while can_start_expr(&self.peek().kind) {
+        // Parse at least one expression
+        loop {
             exprs.push(self.parse_expr()?);
 
             if self.maybe_expect(&T![;]).is_none() {
+                break;
+            }
+            if !can_start_expr(&self.peek().kind) {
                 break;
             }
         }
@@ -390,7 +395,16 @@ impl<'s> Parser<'s> {
 
         Ok(ast::Expr {
             span: start.extend(start.extend(end)),
-            kind: ast::ExprKind::Let { decs, exprs },
+            kind: ast::ExprKind::Let {
+                decs,
+                expr: Box::new(ast::Expr {
+                    span: Span::new(
+                        exprs.get(0).map(|e| e.span.lo).unwrap_or_default(),
+                        exprs.iter().last().map(|e| e.span.hi).unwrap_or_default(),
+                    ),
+                    kind: ast::ExprKind::Exprs(exprs),
+                }),
+            },
         })
     }
 }
@@ -906,8 +920,10 @@ mod tests {
             expect![[r#"
                 0..12: Expr
                   0..12: Let
-                    7..8: Exprs
-                      7..8: Integer(3)
+                    7..8: Expr
+                      7..8: Exprs
+                        7..8: Expr
+                          7..8: Integer(3)
             "#]],
         );
 
@@ -928,9 +944,11 @@ mod tests {
                             20..21: Ident(c)
                           24..25: Type
                             24..25: TypeId(d)
-                    29..30: Exprs
-                      29..30: LValue
-                        29..30: Ident(a)
+                    29..30: Expr
+                      29..30: Exprs
+                        29..30: Expr
+                          29..30: LValue
+                            29..30: Ident(a)
             "#]],
         );
 
@@ -939,12 +957,16 @@ mod tests {
             expect![[r#"
                 0..18: Expr
                   0..18: Let
-                    7..14: Exprs
-                      7..8: LValue
-                        7..8: Ident(a)
-                      10..11: LValue
-                        10..11: Ident(b)
-                      13..14: Integer(1)
+                    7..14: Expr
+                      7..14: Exprs
+                        7..8: Expr
+                          7..8: LValue
+                            7..8: Ident(a)
+                        10..11: Expr
+                          10..11: LValue
+                            10..11: Ident(b)
+                        13..14: Expr
+                          13..14: Integer(1)
             "#]],
         );
     }

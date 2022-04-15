@@ -6,12 +6,12 @@ use tig_common::{
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ParserError {
+pub struct SpannedError {
     pub msg: String,
     pub span: Span,
 }
 
-impl ParserError {
+impl SpannedError {
     pub fn new(msg: impl Into<String>, span: Span) -> Self {
         Self {
             msg: msg.into(),
@@ -34,6 +34,7 @@ impl ParserError {
         let file = match file {
             Some(file) => file,
             None => {
+                eprintln!("{}", self);
                 eprintln!("Displaying errors spanning multiple files is still not supported.");
                 return String::new();
             }
@@ -78,6 +79,18 @@ impl ParserError {
 
             let newline_hi = (&file.content()[..span.hi as usize]).lines().count();
             if linenumber != newline_hi {
+                eprintln!(
+                    "{}: {}-{} {} {}",
+                    if let Some(f) = file.file_path().file_name() {
+                        f.to_string_lossy()
+                    } else {
+                        file.file_path().to_string_lossy()
+                    },
+                    linenumber,
+                    newline_hi,
+                    span,
+                    self
+                );
                 eprintln!("Displaying errors over multiple lines is still not supported.");
                 return String::new();
             }
@@ -108,10 +121,10 @@ impl ParserError {
     }
 }
 
-impl fmt::Display for ParserError {
+impl fmt::Display for SpannedError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "({}, {}): {}", self.span.lo, self.span.hi, self.msg)
     }
 }
 
-impl std::error::Error for ParserError {}
+impl std::error::Error for SpannedError {}

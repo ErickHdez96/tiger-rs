@@ -2,8 +2,7 @@ use std::str::Chars;
 use std::{fmt, iter};
 
 use crate::T;
-use smol_str::SmolStr;
-use tig_common::{SourceFile, Span};
+use tig_common::{SmolStr, SourceFile, Span};
 
 /// The result of tokenizing an input string.
 ///

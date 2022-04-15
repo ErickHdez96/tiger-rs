@@ -5,6 +5,8 @@ edition = "2021"
 authors = ["Erick Hernandez Curiel <erick@hernandezcuriel.dev>"]
 
 [dependencies]
+log = "0.4"
 tig-common = { path = "../tig-common" }
 tig-error = { path = "../tig-error" }
 tig-syntax = { path = "../tig-syntax" }
+tig-semant = { path = "../tig-semant" }

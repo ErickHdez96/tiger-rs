@@ -5,3 +5,4 @@ edition = "2021"
 authors = ["Erick Hernandez Curiel <erick@hernandezcuriel.dev>"]
 
 [dependencies]
+smol_str = "0.1"

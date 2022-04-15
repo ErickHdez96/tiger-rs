@@ -1,4 +1,4 @@
-use tig_error::ParserError;
+use tig_error::SpannedError;
 
 use crate::{
     ast,
@@ -187,7 +187,7 @@ impl<'s> Parser<'s> {
                 match String::from_utf8(path) {
                     Ok(s) => OsString::from(s),
                     Err(e) => {
-                        self.errors.push(ParserError::new(
+                        self.errors.push(SpannedError::new(
                             format!(
                                 "File name is not UTF-8 - '{}'",
                                 String::from_utf8_lossy(e.as_bytes())
@@ -210,7 +210,7 @@ impl<'s> Parser<'s> {
 
                 if let Some(span) = unterminated_comment {
                     self.errors
-                        .push(ParserError::new("Unterminated comment", span));
+                        .push(SpannedError::new("Unterminated comment", span));
                 }
                 Ok(None)
             }
@@ -222,7 +222,7 @@ impl<'s> Parser<'s> {
                     }
                 };
 
-                self.errors.push(ParserError::new(
+                self.errors.push(SpannedError::new(
                     format!(
                         "Failed to import file - {} - {}",
                         file_path.to_string_lossy(),

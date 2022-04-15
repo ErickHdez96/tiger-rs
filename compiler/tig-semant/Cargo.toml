@@ -1,5 +1,5 @@
 [package]
-name = "tig-syntax"
+name = "tig-semant"
 version = "0.1.0"
 edition = "2021"
 authors = ["Erick Hernandez Curiel <erick@hernandezcuriel.dev>"]
@@ -8,7 +8,7 @@ authors = ["Erick Hernandez Curiel <erick@hernandezcuriel.dev>"]
 log = "0.4"
 tig-common = { path = "../tig-common" }
 tig-error = { path = "../tig-error" }
+tig-syntax = { path = "../tig-syntax" }
 
 [dev-dependencies]
-tempfile = "3"
 expect-test = "1"

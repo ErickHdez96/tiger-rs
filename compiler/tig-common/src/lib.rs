@@ -1,8 +1,13 @@
+pub mod env;
 pub mod terminal;
 
+pub use env::Env;
+pub use smol_str::SmolStr;
+
+use std::cell::Cell;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::{fs, io};
+use std::{fmt, fs, io};
 
 /// A span in the source code.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -135,4 +140,34 @@ impl Span {
             hi: end.hi,
         }
     }
+}
+
+impl fmt::Display for Span {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "({}, {})", self.lo, self.hi)
+    }
+}
+
+/// A value that when compared with itself, returns true iff they are the exact same object.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Unique(usize);
+
+impl Unique {
+    pub fn new() -> Self {
+        UNIQUE_COUNTER.with(|counter| {
+            let c = counter.get();
+            counter.set(c + 1);
+            Self(c)
+        })
+    }
+}
+
+impl Default for Unique {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+thread_local! {
+    static UNIQUE_COUNTER: Cell<usize>  = Cell::new(0);
 }
