@@ -1,7 +1,6 @@
 /* error : variable not record */
-let 
-	var d:=0
+let
+    var d := 0
 in
-	d.f 
+    d.f
 end
-
