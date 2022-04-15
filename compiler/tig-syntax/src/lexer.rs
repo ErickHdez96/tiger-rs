@@ -323,7 +323,7 @@ impl Default for Token {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TokenKind {
     /// ,
     Comma,
@@ -610,9 +610,7 @@ mod tests {
     fn test_comments() {
         let input = "/* Comment 1 /* 2 */ 1 */";
         let tokens = tokenize(input).tokens().unwrap();
-        let expected = vec![
-            tok!(0, 1, T![eof]),
-        ];
+        let expected = vec![tok!(0, 1, T![eof])];
 
         assert_eq!(tokens.len(), expected.len());
     }

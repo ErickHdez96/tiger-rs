@@ -1,4 +1,7 @@
-use std::path::PathBuf;
+pub mod terminal;
+
+use std::io::Read;
+use std::path::{Path, PathBuf};
 use std::{fs, io};
 
 /// A span in the source code.
@@ -18,6 +21,17 @@ impl SourceCode {
 
     pub fn add_file(&mut self, path: impl Into<PathBuf>) -> io::Result<&SourceFile> {
         let file = SourceFile::load_file(path, self.length)?;
+        self.length += file.len();
+        self.files.push(file);
+        Ok(&self.files[self.files.len() - 1])
+    }
+
+    pub fn add_reader<R: Read>(
+        &mut self,
+        file_name: impl Into<PathBuf>,
+        file: R,
+    ) -> io::Result<&SourceFile> {
+        let file = SourceFile::load_reader(file_name, file, self.length)?;
         self.length += file.len();
         self.files.push(file);
         Ok(&self.files[self.files.len() - 1])
@@ -66,6 +80,21 @@ impl SourceFile {
         })
     }
 
+    pub fn load_reader<R: Read>(
+        file_name: impl Into<PathBuf>,
+        mut reader: R,
+        offset: usize,
+    ) -> io::Result<Self> {
+        let mut content = String::new();
+        reader.read_to_string(&mut content)?;
+
+        Ok(Self {
+            file_path: file_name.into(),
+            content,
+            offset,
+        })
+    }
+
     pub fn len(&self) -> usize {
         self.content.len()
     }
@@ -76,6 +105,10 @@ impl SourceFile {
 
     pub fn offset(&self) -> usize {
         self.offset
+    }
+
+    pub fn file_path(&self) -> &Path {
+        &self.file_path
     }
 
     pub fn content(&self) -> &str {

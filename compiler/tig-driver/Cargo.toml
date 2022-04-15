@@ -1,0 +1,9 @@
+[package]
+name = "tig-driver"
+version = "0.1.0"
+edition = "2021"
+authors = ["Erick Hernandez Curiel <erick@hernandezcuriel.dev>"]
+
+[dependencies]
+clap = { version = "3", features = ["derive"] }
+tig-compiler = { path = "../tig-compiler" }

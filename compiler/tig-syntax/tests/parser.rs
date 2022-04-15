@@ -29,7 +29,7 @@ fn test_parser_import() {
     write!(imported_file, "{}", imported).expect("shuld write to imported file");
     write!(main_program_file, "{}", main_program).expect("shuld write to main program file");
 
-    let result = parse_file(main_program_file.path()).expect("should parse the file");
+    let (_, result) = parse_file(main_program_file.path()).expect("should parse the file");
     let expected = expect![[r#"
         9..189: Expr
           9..189: Let
@@ -81,6 +81,5 @@ fn test_parser_import() {
                   175..176: LValue
                     175..176: Ident(a)
     "#]];
-    dbg!(result.errors);
     expected.assert_debug_eq(&result.program.expect("should have compiled"));
 }

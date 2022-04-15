@@ -8,7 +8,7 @@ use crate::{
 
 use super::{can_start_dec, PResult, Parser, DECLARATION_START_TOKENS};
 
-impl Parser {
+impl<'s> Parser<'s> {
     pub(super) fn parse_decs(&mut self, end: &TokenKind) -> PResult<Vec<ast::Dec>> {
         let mut decs = vec![];
 
@@ -172,9 +172,7 @@ impl Parser {
             }
             Err(e) => {
                 let error = match e.kind() {
-                    std::io::ErrorKind::NotFound => {
-                        format!("Not found")
-                    }
+                    std::io::ErrorKind::NotFound => "Not found".to_string(),
                     _ => {
                         format!("{}", e)
                     }
@@ -201,7 +199,7 @@ mod tests {
     use super::super::*;
 
     fn check(program: &str, expected: Expect) {
-        let p = parse_str(program);
+        let (_, p) = parse_str(program);
         assert_eq!(p.errors, vec![], "Should have compiled without errors");
         expected.assert_debug_eq(&p.program.expect("to generate a program"));
     }

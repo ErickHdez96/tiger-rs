@@ -2,7 +2,7 @@ mod expr;
 mod stmt;
 mod ty;
 
-use std::{io, path::PathBuf};
+use std::{collections::HashSet, io, path::PathBuf};
 
 use smol_str::SmolStr;
 use tig_common::{SourceCode, SourceFile, Span};
@@ -33,20 +33,27 @@ const TYPE_START_TOKENS: [TokenKind; 3] = [
 ];
 
 /// Parses a file, possibly more if it contains imports.
-pub fn parse_file(file_path: impl Into<PathBuf>) -> io::Result<ParseResult> {
-    let mut parser = Parser::default();
+pub fn parse_file(file_path: impl Into<PathBuf>) -> io::Result<(SourceCode, ParseResult)> {
+    let mut source_code = SourceCode::default();
+    let mut parser = Parser::from_source_code(&mut source_code);
     parser.add_file(file_path)?;
-    Ok(parser.parse())
+    let result = parser.parse();
+    Ok((source_code, result))
 }
 
 /// Parses a file, possibly more if it contains imports.
-pub fn parse_str(input: impl Into<String>) -> ParseResult {
-    let input = input.into();
-    let parser = Parser {
-        source_code: SourceCode::new(vec![SourceFile::from_string(input, 0)]),
-        ..Default::default()
-    };
+pub fn parse_source_code(source_code: &mut SourceCode) -> ParseResult {
+    let parser = Parser::from_source_code(source_code);
     parser.parse()
+}
+
+/// Parses a file, possibly more if it contains imports.
+pub fn parse_str(input: impl Into<String>) -> (SourceCode, ParseResult) {
+    let input = input.into();
+    let mut source_code = SourceCode::new(vec![SourceFile::from_string(input, 0)]);
+    let parser = Parser::from_source_code(&mut source_code);
+    let result = parser.parse();
+    (source_code, result)
 }
 
 /// The result of parsing a program. The parser tries to catch multiple parser errors, by jumping
@@ -56,7 +63,6 @@ pub fn parse_str(input: impl Into<String>) -> ParseResult {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParseResult {
     pub program: Option<Program>,
-    pub source_code: SourceCode,
     pub errors: Vec<ParserError>,
 }
 
@@ -69,9 +75,9 @@ pub struct ParseResult {
 /// tokenizing the imported file, and insert the tokens into the stream, exactly between the import
 /// and the next token. In other words, once the parser is done parsing an import, the next token
 /// it will read will be the first token from the imported file.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-struct Parser {
-    source_code: SourceCode,
+#[derive(Debug)]
+struct Parser<'s> {
+    source_code: &'s mut SourceCode,
     errors: Vec<ParserError>,
     tokens: TokenStream,
 
@@ -79,13 +85,22 @@ struct Parser {
     /// The next call to `next` will clear it.
     /// The next call to an expect method which fails, will generate an error message including
     /// this array in the expected one of list.
-    expected: Vec<TokenKind>,
+    expected: HashSet<TokenKind>,
 }
 
 // To allow to use ?.
 type PResult<T> = Result<T, ()>;
 
-impl Parser {
+impl<'s> Parser<'s> {
+    fn from_source_code(source_code: &'s mut SourceCode) -> Self {
+        Self {
+            source_code,
+            errors: vec![],
+            tokens: TokenStream::default(),
+            expected: HashSet::new(),
+        }
+    }
+
     fn add_file(&mut self, file_path: impl Into<PathBuf>) -> io::Result<&SourceFile> {
         self.source_code.add_file(file_path)
     }
@@ -113,7 +128,6 @@ impl Parser {
 
     /// Get the next token without advancing the pointer.
     fn peek(&self) -> &Token {
-        //dbg!(self.tokens.peek())
         self.tokens.peek()
     }
 
@@ -128,7 +142,6 @@ impl Parser {
 
         ParseResult {
             program,
-            source_code: self.source_code,
             errors: self.errors,
         }
     }
@@ -159,7 +172,7 @@ impl Parser {
         if &self.peek().kind == kind {
             Some(self.next())
         } else {
-            self.expected.push(kind.clone());
+            self.expected.insert(kind.clone());
             None
         }
     }
@@ -178,7 +191,7 @@ impl Parser {
                 Some(ident)
             }
             _ => {
-                self.expected.push(TokenKind::Id(SmolStr::new_inline("")));
+                self.expected.insert(TokenKind::Id(SmolStr::new_inline("")));
                 None
             }
         }
@@ -241,14 +254,16 @@ impl Parser {
     /// token was found.
     fn expected(&mut self) {
         let got = self.peek();
+        let mut tokens = self
+            .expected
+            .iter()
+            .map(|e| e.to_kind_string())
+            .collect::<Vec<_>>();
+        tokens.sort();
         let error = ParserError::new(
             format!(
                 "Expected one of '{}', got '{}'",
-                self.expected
-                    .iter()
-                    .map(|e| e.to_kind_string())
-                    .collect::<Vec<_>>()
-                    .join(", "),
+                tokens.join(", "),
                 got.kind,
             ),
             got.span,
@@ -272,7 +287,7 @@ impl Parser {
             self.errors.push(error);
         } else {
             // Cloning a TokenKind is O(1).
-            self.expected.push(expected.clone());
+            self.expected.insert(expected.clone());
             self.expected();
             self.expected.clear();
         }
@@ -281,7 +296,9 @@ impl Parser {
     /// Push an error, saying one of the `expected` tokens was expected to be the next token, but
     /// the current token was found.
     fn expected_one_of(&mut self, expected: &[TokenKind]) {
-        self.expected.extend_from_slice(expected);
+        for e in expected {
+            self.expected.insert(e.clone()); // TokenKind clone is O(1)
+        }
         self.expected();
     }
 

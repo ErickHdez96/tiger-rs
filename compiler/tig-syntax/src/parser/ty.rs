@@ -6,7 +6,7 @@ use crate::{
 
 use super::{PResult, Parser, TYPE_START_TOKENS};
 
-impl Parser {
+impl<'s> Parser<'s> {
     pub(super) fn parse_type(&mut self) -> PResult<ast::Type> {
         match self.peek() {
             Token {
@@ -65,7 +65,7 @@ mod tests {
     use super::super::*;
 
     fn check(program: &str, expected: Expect) {
-        let p = parse_str(program);
+        let (_, p) = parse_str(program);
         assert_eq!(p.errors, vec![], "Should have compiled without errors");
         expected.assert_debug_eq(&p.program.expect("to generate a program"));
     }

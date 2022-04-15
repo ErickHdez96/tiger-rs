@@ -1,0 +1,10 @@
+[package]
+name = "tig-compiler"
+version = "0.1.0"
+edition = "2021"
+authors = ["Erick Hernandez Curiel <erick@hernandezcuriel.dev>"]
+
+[dependencies]
+tig-common = { path = "../tig-common" }
+tig-error = { path = "../tig-error" }
+tig-syntax = { path = "../tig-syntax" }

@@ -26,7 +26,7 @@ fn infix_binding_power(kind: &TokenKind) -> Option<(u8, u8, ast::BinOp)> {
     })
 }
 
-impl Parser {
+impl<'s> Parser<'s> {
     pub(super) fn parse_expr(&mut self) -> PResult<ast::Expr> {
         self.parse_expr_bp(0)
     }
@@ -155,6 +155,8 @@ impl Parser {
                     value: id.clone(), // SmolStr clone is O(1)
                 };
                 self.next();
+                self.expected.insert(T!['{']);
+                self.expected.insert(T!['(']);
                 if self.peek().kind == T!['{'] {
                     self.parse_record_creation(ident)
                 } else if self.peek().kind == T!['('] {
@@ -249,6 +251,8 @@ impl Parser {
     }
 
     fn parse_lvalue(&mut self, lvalue: ast::LValue) -> PResult<ast::LValue> {
+        self.expected.insert(T!['[']);
+        self.expected.insert(T![.]);
         match &self.peek().kind {
             T![.] => {
                 self.next();
@@ -397,7 +401,7 @@ mod tests {
     use super::super::*;
 
     fn check(program: &str, expected: Expect) {
-        let p = parse_str(program);
+        let (_, p) = parse_str(program);
         assert_eq!(p.errors, vec![], "Should have compiled without errors");
         expected.assert_debug_eq(&p.program.expect("to generate a program"));
     }
