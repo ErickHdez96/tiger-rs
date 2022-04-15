@@ -40,12 +40,12 @@ impl<'s> Parser<'s> {
                     kind: ast::ExprKind::LValue(lvalue),
                     span,
                 } => {
-                    let source = self.parse_expr().map(Box::new)?;
+                    let source = self.parse_expr()?;
                     return Ok(ast::Expr {
                         span: span.extend(source.span),
                         kind: ast::ExprKind::Assign {
                             destination: lvalue,
-                            source,
+                            source: Box::new(source),
                         },
                     });
                 }
@@ -366,6 +366,7 @@ impl<'s> Parser<'s> {
             span: start.extend(body.span),
             kind: ast::ExprKind::For {
                 iterator,
+                escape: false,
                 start: Box::new(init),
                 end: Box::new(end),
                 body: Box::new(body),
@@ -873,7 +874,7 @@ mod tests {
             "for i := 0 to 10 do a",
             expect![[r#"
                 0..21: Expr
-                  0..21: For
+                  0..21: For - Escape(false)
                     4..5: Ident
                       4..5: Ident(i)
                     9..10: Start
@@ -916,16 +917,17 @@ mod tests {
                 0..34: Expr
                   0..34: Let
                     4..25: Decs
-                      4..14: TypeDec
-                        9..10: TypeName
-                          9..10: Ident(a)
-                        13..14: Type
-                          13..14: TypeId(b)
-                      15..25: TypeDec
-                        20..21: TypeName
-                          20..21: Ident(c)
-                        24..25: Type
-                          24..25: TypeId(d)
+                      4..25: TypeDecs
+                        4..14: TypeDec
+                          9..10: TypeName
+                            9..10: Ident(a)
+                          13..14: Type
+                            13..14: TypeId(b)
+                        15..25: TypeDec
+                          20..21: TypeName
+                            20..21: Ident(c)
+                          24..25: Type
+                            24..25: TypeId(d)
                     29..30: Exprs
                       29..30: LValue
                         29..30: Ident(a)

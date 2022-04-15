@@ -76,11 +76,12 @@ mod tests {
             "type my_int = int",
             expect![[r#"
                 0..17: Decs
-                  0..17: TypeDec
-                    5..11: TypeName
-                      5..11: Ident(my_int)
-                    14..17: Type
-                      14..17: TypeId(int)
+                  0..17: TypeDecs
+                    0..17: TypeDec
+                      5..11: TypeName
+                        5..11: Ident(my_int)
+                      14..17: Type
+                        14..17: TypeId(int)
             "#]],
         );
     }
@@ -91,13 +92,14 @@ mod tests {
             "type span = { lo: int, hi: int }",
             expect![[r#"
                 0..32: Decs
-                  0..32: TypeDec
-                    5..9: TypeName
-                      5..9: Ident(span)
-                    12..32: Type
-                      12..32: Record
-                        14..16: Name(lo) - 18..21: Type(int)
-                        23..25: Name(hi) - 27..30: Type(int)
+                  0..32: TypeDecs
+                    0..32: TypeDec
+                      5..9: TypeName
+                        5..9: Ident(span)
+                      12..32: Type
+                        12..32: Record
+                          14..16: Name(lo) - 18..21: Type(int)
+                          23..25: Name(hi) - 27..30: Type(int)
             "#]],
         );
     }
@@ -108,11 +110,12 @@ mod tests {
             "type my_int = array of int",
             expect![[r#"
                 0..26: Decs
-                  0..26: TypeDec
-                    5..11: TypeName
-                      5..11: Ident(my_int)
-                    14..26: Type
-                      14..26: TypeArray(int)
+                  0..26: TypeDecs
+                    0..26: TypeDec
+                      5..11: TypeName
+                        5..11: Ident(my_int)
+                      14..26: Type
+                        14..26: TypeArray(int)
             "#]],
         );
     }

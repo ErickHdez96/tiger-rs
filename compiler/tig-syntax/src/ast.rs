@@ -298,12 +298,13 @@ impl fmt::Debug for Expr {
                 ),
                 ExprKind::For {
                     iterator,
+                    escape,
                     start,
                     end,
                     body,
                 } => write!(
                     f,
-                    "{}{}..{}: For\n\
+                    "{}{}..{}: For - Escape({})\n\
                      {}{}..{}: Ident\n{:#width$?}\n\
                      {}{}..{}: Start\n{:#width$?}\n\
                      {}{}..{}: End\n{:#width$?}\n\
@@ -311,6 +312,7 @@ impl fmt::Debug for Expr {
                     padding,
                     self.span.lo,
                     self.span.hi,
+                    escape,
                     " ".repeat(width + 2),
                     iterator.span.lo,
                     iterator.span.hi,
@@ -433,6 +435,7 @@ pub enum ExprKind {
     },
     For {
         iterator: Ident,
+        escape: bool,
         start: Box<Expr>,
         end: Box<Expr>,
         body: Box<Expr>,
@@ -608,32 +611,47 @@ impl fmt::Debug for Dec {
             let width = f.width().unwrap_or_default();
             let padding = " ".repeat(width);
             match &self.kind {
-                DecKind::Type { name, ty } => write!(
+                DecKind::Type(tys) => write!(
                     f,
-                    "{}{}..{}: TypeDec\n\
-                     {}{}..{}: TypeName\n{:#width$?}\n\
-                     {}{}..{}: Type\n{:#width$?}",
+                    "{}{}..{}: TypeDecs\n{}",
                     padding,
                     self.span.lo,
                     self.span.hi,
-                    " ".repeat(width + 2),
-                    name.span.lo,
-                    name.span.hi,
-                    name,
-                    " ".repeat(width + 2),
-                    ty.span.lo,
-                    ty.span.hi,
-                    ty,
-                    width = width + 4,
+                    tys.iter()
+                        .map(|ty| format!(
+                            "{}{}..{}: TypeDec\n\
+                                 {}{}..{}: TypeName\n{:#width$?}\n\
+                                 {}{}..{}: Type\n{:#width$?}",
+                            " ".repeat(width + 2),
+                            ty.span.lo,
+                            ty.span.hi,
+                            " ".repeat(width + 4),
+                            ty.name.span.lo,
+                            ty.name.span.hi,
+                            ty.name,
+                            " ".repeat(width + 4),
+                            ty.ty.span.lo,
+                            ty.ty.span.hi,
+                            ty.ty,
+                            width = width + 6,
+                        ))
+                        .collect::<Vec<_>>()
+                        .join("\n")
                 ),
-                DecKind::Variable { name, ty, value } => write!(
+                DecKind::Variable {
+                    name,
+                    escape,
+                    ty,
+                    value,
+                } => write!(
                     f,
-                    "{}{}..{}: VarDec\n\
+                    "{}{}..{}: VarDec - Escape({})\n\
                      {}{}..{}: Variable({}){}\n\
                      {}{}..{}: Value\n{:#width$?}",
                     padding,
                     self.span.lo,
                     self.span.hi,
+                    escape,
                     " ".repeat(width + 2),
                     name.span.lo,
                     name.span.hi,
@@ -655,61 +673,63 @@ impl fmt::Debug for Dec {
                     value,
                     width = width + 4,
                 ),
-                DecKind::Function {
-                    name,
-                    parameters,
-                    ret_ty,
-                    body,
-                } => write!(
+                DecKind::Function(fns) => write!(
                     f,
-                    "{}{}..{}: Function\n\
-                     {}{}..{}: Name({}){}{}\n\
-                     {}{}..{}: Body\n{:#width$?}",
+                    "{}{}..{}: Functions\n{}",
                     padding,
                     self.span.lo,
                     self.span.hi,
-                    " ".repeat(width + 2),
-                    name.span.lo,
-                    name.span.hi,
-                    name.value,
-                    if parameters.is_empty() {
-                        "".to_string()
-                    } else {
-                        format!(
-                            "\n{}{}..{}: Parameters\n{}",
+                    fns.iter()
+                        .map(|f| format!(
+                            "{}{}..{}: Function\n\
+                                 {}{}..{}: Name({}){}{}\n\
+                                 {}{}..{}: Body\n{:#width$?}",
                             " ".repeat(width + 2),
-                            parameters
-                                .iter()
-                                .next()
-                                .map(|p| p.name.span.lo)
-                                .unwrap_or_default(),
-                            parameters
-                                .iter()
-                                .next()
-                                .map(|p| p.ty.span.hi)
-                                .unwrap_or_default(),
-                            parameters
-                                .iter()
-                                .map(|p| format!("{:#width$?}", p, width = width + 4))
-                                .collect::<Vec<_>>()
-                                .join("\n"),
-                        )
-                    },
-                    match ret_ty {
-                        Some(ret_ty) => format!(
-                            "\n{}{}..{}: ReturnType({})",
-                            " ".repeat(width + 2),
-                            ret_ty.span.lo,
-                            ret_ty.span.hi,
-                            ret_ty.value,
-                        ),
-                        None => "".to_string(),
-                    },
-                    " ".repeat(width + 2),
-                    body.span.lo,
-                    body.span.hi,
-                    body,
-                    width = width + 4,
+                            f.name.span.lo,
+                            f.body.span.hi,
+                            " ".repeat(width + 4),
+                            f.name.span.lo,
+                            f.name.span.hi,
+                            f.name.value,
+                            if f.parameters.is_empty() {
+                                "".to_string()
+                            } else {
+                                format!(
+                                    "\n{}{}..{}: Parameters\n{}",
+                                    " ".repeat(width + 4),
+                                    f.parameters
+                                        .get(0)
+                                        .map(|p| p.name.span.lo)
+                                        .unwrap_or_default(),
+                                    f.parameters
+                                        .get(0)
+                                        .map(|p| p.ty.span.hi)
+                                        .unwrap_or_default(),
+                                    f.parameters
+                                        .iter()
+                                        .map(|p| format!("{:#width$?}", p, width = width + 6))
+                                        .collect::<Vec<_>>()
+                                        .join("\n"),
+                                )
+                            },
+                            match &f.ret_ty {
+                                Some(ret_ty) => format!(
+                                    "\n{}{}..{}: ReturnType({})",
+                                    " ".repeat(width + 4),
+                                    ret_ty.span.lo,
+                                    ret_ty.span.hi,
+                                    ret_ty.value,
+                                ),
+                                None => "".to_string(),
+                            },
+                            " ".repeat(width + 4),
+                            f.body.span.lo,
+                            f.body.span.hi,
+                            f.body,
+                            width = width + 6,
+                        ))
+                        .collect::<Vec<_>>()
+                        .join("\n"),
                 ),
                 DecKind::Primitive {
                     name,
@@ -772,23 +792,19 @@ impl fmt::Debug for Dec {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DecKind {
     /// Type declaration.
-    Type { name: Ident, ty: Type },
+    Type(Vec<TypeDec>),
     // Class definition (alternative form).
     // Class { name: Ident, extends: Option<Ident>, fields: Vec<ClassField> },
     /// Variable declaration.
     Variable {
         name: Ident,
+        escape: bool,
         ty: Option<Ident>,
         value: Box<Expr>,
     },
 
     /// Function declaration.
-    Function {
-        name: Ident,
-        parameters: Vec<TyField>,
-        ret_ty: Option<Ident>,
-        body: Box<Expr>,
-    },
+    Function(Vec<FunctionDec>),
 
     /// Primitive declaration.
     Primitive {
@@ -797,6 +813,22 @@ pub enum DecKind {
         ret_ty: Option<Ident>,
     },
     // Imports are evaluated during parsing.
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TypeDec {
+    pub span: Span,
+    pub name: Ident,
+    pub ty: Type,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FunctionDec {
+    pub span: Span,
+    pub name: Ident,
+    pub parameters: Vec<Field>,
+    pub ret_ty: Option<Ident>,
+    pub body: Box<Expr>,
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -820,6 +852,38 @@ impl fmt::Debug for Ident {
             f.debug_struct("Ident")
                 .field("span", &self.span)
                 .field("value", &self.value)
+                .finish()
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub struct Field {
+    pub name: Ident,
+    pub escape: bool,
+    pub ty: Ident,
+}
+
+impl fmt::Debug for Field {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if f.alternate() {
+            let width = f.width().unwrap_or_default();
+            write!(
+                f,
+                "{}{}..{}: Name({}) - {}..{}: Type({}) - Escape({})",
+                " ".repeat(width),
+                self.name.span.lo,
+                self.name.span.hi,
+                self.name.value,
+                self.ty.span.lo,
+                self.ty.span.hi,
+                self.ty.value,
+                self.escape,
+            )
+        } else {
+            f.debug_struct("Ident")
+                .field("name", &self.name)
+                .field("ty", &self.ty)
                 .finish()
         }
     }

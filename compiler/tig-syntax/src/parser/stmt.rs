@@ -20,7 +20,45 @@ impl<'s> Parser<'s> {
             }
 
             if let Some(dec) = self.parse_dec()? {
-                decs.push(dec);
+                match dec {
+                    ast::Dec {
+                        kind: ast::DecKind::Function(mut f),
+                        span: span_f,
+                    } => match decs.iter_mut().last() {
+                        Some(ast::Dec {
+                            kind: ast::DecKind::Function(fm),
+                            span: span_fm,
+                        }) => {
+                            *span_fm = span_fm.extend(span_f);
+                            fm.append(&mut f);
+                        }
+                        _ => {
+                            decs.push(ast::Dec {
+                                span: span_f,
+                                kind: ast::DecKind::Function(f),
+                            });
+                        }
+                    },
+                    ast::Dec {
+                        kind: ast::DecKind::Type(mut t),
+                        span: span_t,
+                    } => match decs.iter_mut().last() {
+                        Some(ast::Dec {
+                            kind: ast::DecKind::Type(tm),
+                            span: span_tm,
+                        }) => {
+                            *span_tm = span_tm.extend(span_t);
+                            tm.append(&mut t);
+                        }
+                        _ => {
+                            decs.push(ast::Dec {
+                                span: span_t,
+                                kind: ast::DecKind::Type(t),
+                            });
+                        }
+                    },
+                    dec => decs.push(dec),
+                }
             }
         }
 
@@ -46,7 +84,11 @@ impl<'s> Parser<'s> {
         let ty = self.parse_type()?;
         Ok(ast::Dec {
             span: start.extend(ty.span),
-            kind: ast::DecKind::Type { name, ty },
+            kind: ast::DecKind::Type(vec![ast::TypeDec {
+                name,
+                span: start.extend(ty.span),
+                ty,
+            }]),
         })
     }
 
@@ -65,6 +107,7 @@ impl<'s> Parser<'s> {
             span: start.extend(value.span),
             kind: ast::DecKind::Variable {
                 name,
+                escape: false,
                 ty,
                 value: Box::new(value),
             },
@@ -75,7 +118,7 @@ impl<'s> Parser<'s> {
         let start = self.next().span;
         let name = self.expect_ident()?;
         self.expect(&T!['('])?;
-        let parameters = self.parse_ty_fields()?;
+        let parameters = self.parse_fields()?;
         self.expect(&T![')'])?;
 
         let ret_ty = if self.maybe_expect(&T![:]).is_some() {
@@ -89,12 +132,13 @@ impl<'s> Parser<'s> {
 
         Ok(ast::Dec {
             span: start.extend(body.span),
-            kind: ast::DecKind::Function {
+            kind: ast::DecKind::Function(vec![ast::FunctionDec {
+                span: start.extend(body.span),
                 name,
                 parameters,
                 ret_ty,
                 body: Box::new(body),
-            },
+            }]),
         })
     }
 
@@ -210,11 +254,30 @@ mod tests {
             "type my_int = int",
             expect![[r#"
                 0..17: Decs
-                  0..17: TypeDec
-                    5..11: TypeName
-                      5..11: Ident(my_int)
-                    14..17: Type
-                      14..17: TypeId(int)
+                  0..17: TypeDecs
+                    0..17: TypeDec
+                      5..11: TypeName
+                        5..11: Ident(my_int)
+                      14..17: Type
+                        14..17: TypeId(int)
+            "#]],
+        );
+
+        check(
+            "type my_int = int type my_string = string",
+            expect![[r#"
+                0..41: Decs
+                  0..41: TypeDecs
+                    0..17: TypeDec
+                      5..11: TypeName
+                        5..11: Ident(my_int)
+                      14..17: Type
+                        14..17: TypeId(int)
+                    18..41: TypeDec
+                      23..32: TypeName
+                        23..32: Ident(my_string)
+                      35..41: Type
+                        35..41: TypeId(string)
             "#]],
         );
     }
@@ -225,7 +288,7 @@ mod tests {
             "var a := 3",
             expect![[r#"
                 0..10: Decs
-                  0..10: VarDec
+                  0..10: VarDec - Escape(false)
                     4..5: Variable(a)
                     9..10: Value
                       9..10: Integer(3)
@@ -236,7 +299,7 @@ mod tests {
             "var b: int := add(1, 2)",
             expect![[r#"
                 0..23: Decs
-                  0..23: VarDec
+                  0..23: VarDec - Escape(false)
                     4..5: Variable(b)
                     7..10: Type(int)
                     14..23: Value
@@ -255,20 +318,21 @@ mod tests {
             "function add(x: int, y: int): int = x + y",
             expect![[r#"
                 0..41: Decs
-                  0..41: Function
-                    9..12: Name(add)
-                    13..19: Parameters
-                      13..14: Name(x) - 16..19: Type(int)
-                      21..22: Name(y) - 24..27: Type(int)
-                    30..33: ReturnType(int)
-                    36..41: Body
-                      36..41: BinaryOp(+)
-                        36..37: Left
-                          36..37: LValue
-                            36..37: Ident(x)
-                        40..41: Right
-                          40..41: LValue
-                            40..41: Ident(y)
+                  0..41: Functions
+                    9..41: Function
+                      9..12: Name(add)
+                      13..19: Parameters
+                        13..14: Name(x) - 16..19: Type(int) - Escape(false)
+                        21..22: Name(y) - 24..27: Type(int) - Escape(false)
+                      30..33: ReturnType(int)
+                      36..41: Body
+                        36..41: BinaryOp(+)
+                          36..37: Left
+                            36..37: LValue
+                              36..37: Ident(x)
+                          40..41: Right
+                            40..41: LValue
+                              40..41: Ident(y)
             "#]],
         );
 
@@ -276,10 +340,27 @@ mod tests {
             "function one() = 1",
             expect![[r#"
                 0..18: Decs
-                  0..18: Function
-                    9..12: Name(one)
-                    17..18: Body
-                      17..18: Integer(1)
+                  0..18: Functions
+                    9..18: Function
+                      9..12: Name(one)
+                      17..18: Body
+                        17..18: Integer(1)
+            "#]],
+        );
+
+        check(
+            "function one() = 1 function two() = 2",
+            expect![[r#"
+                0..37: Decs
+                  0..37: Functions
+                    9..18: Function
+                      9..12: Name(one)
+                      17..18: Body
+                        17..18: Integer(1)
+                    28..37: Function
+                      28..31: Name(two)
+                      36..37: Body
+                        36..37: Integer(2)
             "#]],
         );
     }

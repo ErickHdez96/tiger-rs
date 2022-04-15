@@ -302,6 +302,26 @@ impl<'s> Parser<'s> {
         self.expected();
     }
 
+    fn parse_fields(&mut self) -> PResult<Vec<ast::Field>> {
+        let mut fields = vec![];
+
+        while let Some(name) = self.maybe_expect_ident() {
+            self.expect(&T![:])?;
+            let ty = self.expect_ident()?;
+            fields.push(ast::Field {
+                name,
+                escape: false,
+                ty,
+            });
+
+            if self.maybe_expect(&T![,]).is_none() {
+                break;
+            }
+        }
+
+        Ok(fields)
+    }
+
     fn parse_ty_fields(&mut self) -> PResult<Vec<ast::TyField>> {
         let mut ty_fields = vec![];
 
@@ -521,4 +541,91 @@ fn can_start_expr(kind: &TokenKind) -> bool {
         | Break
         | Let,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use expect_test::{expect, Expect};
+
+    use super::*;
+
+    fn check(program: &str, expected: Expect) {
+        let (_, p) = parse_str(program);
+        assert_eq!(p.errors, vec![], "Should have compiled without errors");
+        expected.assert_debug_eq(&p.program.expect("to generate a program"));
+    }
+
+    #[test]
+    fn test_function() {
+        check(
+            r#"
+            function _main() =
+                let
+                    function id_int(x: int) = x
+                    function id_string(x: string) = x
+                    type a = b
+                    type b = c
+                    type c = int
+                    function one() = 1
+                    type d = string
+                in
+                    one()
+                end
+            "#,
+            expect![[r#"
+                13..388: Decs
+                  13..388: Functions
+                    22..388: Function
+                      22..27: Name(_main)
+                      48..388: Body
+                        48..388: Let
+                          72..323: Decs
+                            72..153: Functions
+                              81..99: Function
+                                81..87: Name(id_int)
+                                88..94: Parameters
+                                  88..89: Name(x) - 91..94: Type(int) - Escape(false)
+                                98..99: Body
+                                  98..99: LValue
+                                    98..99: Ident(x)
+                              129..153: Function
+                                129..138: Name(id_string)
+                                139..148: Parameters
+                                  139..140: Name(x) - 142..148: Type(string) - Escape(false)
+                                152..153: Body
+                                  152..153: LValue
+                                    152..153: Ident(x)
+                            174..248: TypeDecs
+                              174..184: TypeDec
+                                179..180: TypeName
+                                  179..180: Ident(a)
+                                183..184: Type
+                                  183..184: TypeId(b)
+                              205..215: TypeDec
+                                210..211: TypeName
+                                  210..211: Ident(b)
+                                214..215: Type
+                                  214..215: TypeId(c)
+                              236..248: TypeDec
+                                241..242: TypeName
+                                  241..242: Ident(c)
+                                245..248: Type
+                                  245..248: TypeId(int)
+                            269..287: Functions
+                              278..287: Function
+                                278..281: Name(one)
+                                286..287: Body
+                                  286..287: Integer(1)
+                            308..323: TypeDecs
+                              308..323: TypeDec
+                                313..314: TypeName
+                                  313..314: Ident(d)
+                                317..323: Type
+                                  317..323: TypeId(string)
+                          363..368: Exprs
+                            363..368: Call
+                              363..366: Func(one)
+            "#]],
+        );
+    }
 }

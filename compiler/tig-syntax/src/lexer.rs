@@ -109,7 +109,7 @@ pub fn tokenize_with_offset(input: &str, offset: u32) -> LexerResult {
                     next(lex);
                     next(lex);
                     next(lex);
-                    TokenKind::Main
+                    TokenKind::Id("_main".into())
                 } else {
                     TokenKind::Unknown(c)
                 }
@@ -374,9 +374,6 @@ pub enum TokenKind {
     /// ']'
     RBracket,
 
-    /// _main
-    Main,
-
     Id(SmolStr),
 
     Integer(SmolStr),
@@ -455,7 +452,6 @@ impl fmt::Display for TokenKind {
                 TokenKind::RBrace => "}",
                 TokenKind::LBracket => "[",
                 TokenKind::RBracket => "]",
-                TokenKind::Main => "_main",
                 TokenKind::Id(s) | TokenKind::Integer(s) | TokenKind::String { value: s, .. } =>
                     return write!(f, "{}", s),
                 TokenKind::Array => "array",
@@ -658,7 +654,7 @@ macro_rules! T {
         TokenKind::Dummy
     };
     (_main) => {
-        TokenKind::Main
+        TokenKind::Id("_main".into())
     };
     (id, $id:expr) => {
         TokenKind::Id($id.into())
