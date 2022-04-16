@@ -1,5 +1,6 @@
 use std::rc::Rc;
 
+use tig_arch::Frame;
 use tig_common::Span;
 use tig_error::SpannedError;
 use tig_syntax::ast;
@@ -18,9 +19,9 @@ macro_rules! E {
     };
 }
 
-impl Translator {
+impl<F: Frame + PartialEq + Eq> Translator<F> {
     /// Translates an expression into an `ExpTy`.
-    pub(super) fn translate_expr(&mut self, expr: ast::Expr, venv: &VEnv, tenv: &TEnv) -> ExpTy {
+    pub(super) fn translate_expr(&mut self, expr: ast::Expr, venv: &VEnv<F>, tenv: &TEnv) -> ExpTy {
         let ast::Expr {
             span,
             kind: expr_kind,
@@ -128,11 +129,34 @@ impl Translator {
 
             ast::ExprKind::For {
                 iterator,
+                escape,
                 start,
                 end,
                 body,
-                ..
-            } => self.translate_for(iterator, *start, *end, *body, venv, tenv),
+            } => {
+                let start_span = start.span;
+                let start_ty = self.translate_expr(*start, venv, tenv);
+                self.expect_int(&start_ty, start_span, tenv);
+
+                let end_span = end.span;
+                let end_ty = self.translate_expr(*end, venv, tenv);
+                self.expect_int(&end_ty, end_span, tenv);
+
+                let mut venv = venv.new_child();
+                venv.enter(iterator.value, ValEntry::Variable { ty: Type::int() });
+                let _access = self.current_level.alloc_local(escape);
+
+                self.loop_stack += 1;
+                let body_span = body.span;
+                let body_ty = self.translate_expr(*body, &venv, tenv);
+                self.expect_unit(&body_ty, body_span, tenv);
+                self.loop_stack -= 1;
+
+                ExpTy {
+                    exp: (),
+                    ty: Type::unit(),
+                }
+            }
 
             ast::ExprKind::Break => {
                 if self.loop_stack == 0 {
@@ -156,7 +180,7 @@ impl Translator {
         op: ast::BinOp,
         left: ast::Expr,
         right: ast::Expr,
-        venv: &VEnv,
+        venv: &VEnv<F>,
         tenv: &TEnv,
     ) -> ExpTy {
         let lspan = left.span;
@@ -223,7 +247,7 @@ impl Translator {
         span: Span,
         func: ast::Ident,
         arguments: Vec<ast::Expr>,
-        venv: &VEnv,
+        venv: &VEnv<F>,
         tenv: &TEnv,
     ) -> ExpTy {
         let (formals, result) = match venv.look(&func.value) {
@@ -235,7 +259,9 @@ impl Translator {
                         ty: Type::hole(),
                     };
                 }
-                ValEntry::Function { formals, result } => (formals, result),
+                ValEntry::Function {
+                    formals, result, ..
+                } => (formals, result),
             },
             None => {
                 E!(self, func.span, "Undefined function '{}'", func.value,);
@@ -286,7 +312,7 @@ impl Translator {
         type_id: ast::Ident,
         size: ast::Expr,
         initial_value: ast::Expr,
-        venv: &VEnv,
+        venv: &VEnv<F>,
         tenv: &TEnv,
     ) -> ExpTy {
         let array_ty = self.resolve_ty(&type_id.value, type_id.span, tenv, true);
@@ -353,7 +379,7 @@ impl Translator {
             span: ty_id_span,
         }: ast::Ident,
         fields: Vec<ast::RecordField>,
-        venv: &VEnv,
+        venv: &VEnv<F>,
         tenv: &TEnv,
     ) -> ExpTy {
         let found_ty = match tenv.look(&ty_id_value) {
@@ -455,7 +481,7 @@ impl Translator {
         cond: ast::Expr,
         then_branch: ast::Expr,
         else_branch: Option<Box<ast::Expr>>,
-        venv: &VEnv,
+        venv: &VEnv<F>,
         tenv: &TEnv,
     ) -> ExpTy {
         let cond_span = cond.span;
@@ -520,7 +546,7 @@ impl Translator {
         &mut self,
         cond: ast::Expr,
         body: ast::Expr,
-        venv: &VEnv,
+        venv: &VEnv<F>,
         tenv: &TEnv,
     ) -> ExpTy {
         let cond_span = cond.span;
@@ -538,43 +564,12 @@ impl Translator {
             ty: Type::unit(),
         }
     }
-
-    fn translate_for(
-        &mut self,
-        iterator: ast::Ident,
-        start: ast::Expr,
-        end: ast::Expr,
-        body: ast::Expr,
-        venv: &VEnv,
-        tenv: &TEnv,
-    ) -> ExpTy {
-        let start_span = start.span;
-        let start_ty = self.translate_expr(start, venv, tenv);
-        self.expect_int(&start_ty, start_span, tenv);
-
-        let end_span = end.span;
-        let end_ty = self.translate_expr(end, venv, tenv);
-        self.expect_int(&end_ty, end_span, tenv);
-
-        let mut venv = venv.new_child();
-        venv.enter(iterator.value, ValEntry::Variable { ty: Type::int() });
-
-        self.loop_stack += 1;
-        let body_span = body.span;
-        let body_ty = self.translate_expr(body, &venv, tenv);
-        self.expect_unit(&body_ty, body_span, tenv);
-        self.loop_stack -= 1;
-
-        ExpTy {
-            exp: (),
-            ty: Type::unit(),
-        }
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use expect_test::{expect, Expect};
+    use tig_arch::amd64::Amd64Frame;
 
     use crate::translate_program;
 
@@ -583,7 +578,7 @@ mod tests {
     fn check(program: &str, expected: Expect) {
         let (_, p) = parse_str(program);
         assert_eq!(p.errors, vec![]);
-        let result = translate_program(p.program.expect("Should have compiled"));
+        let result = translate_program::<Amd64Frame>(p.program.expect("Should have compiled"));
         assert_eq!(result.errors, vec![]);
         expected.assert_debug_eq(&result.expty);
     }
@@ -591,7 +586,7 @@ mod tests {
     fn check_err(program: &str, expected: Vec<Expect>) {
         let (_, p) = parse_str(program);
         assert_eq!(p.errors, vec![]);
-        let result = translate_program(p.program.expect("Should have compiled"));
+        let result = translate_program::<Amd64Frame>(p.program.expect("Should have compiled"));
         for (r, e) in result.errors.iter().zip(expected.iter()) {
             e.assert_eq(&format!("{}", r));
         }

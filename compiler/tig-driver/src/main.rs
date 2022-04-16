@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use clap::Parser;
+use tig_arch::{amd64::Amd64Frame, Frame};
 use tig_compiler::Compiler;
 use tig_syntax::ast;
 
@@ -20,7 +21,7 @@ struct TigerCli {
     input_file: Option<PathBuf>,
 }
 
-fn new_compiler(file: Option<PathBuf>) -> Compiler {
+fn new_compiler<F: Frame>(file: Option<PathBuf>) -> Compiler<F> {
     let (name, result) = match file {
         Some(file_path) => (
             file_path.to_string_lossy().to_string(),
@@ -50,7 +51,7 @@ fn main() -> std::io::Result<()> {
         return Ok(());
     }
 
-    let mut compiler = new_compiler(cli.input_file);
+    let mut compiler = new_compiler::<Amd64Frame>(cli.input_file);
 
     if cli.display_ast {
         return match compiler.display_ast() {

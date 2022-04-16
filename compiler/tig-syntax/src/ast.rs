@@ -547,9 +547,17 @@ impl fmt::Debug for LValue {
             }
         } else {
             match self {
-                LValue::Ident(_) => todo!(),
-                LValue::FieldAccess(_, _) => todo!(),
-                LValue::ArrayAccess(_, _) => todo!(),
+                LValue::Ident(ident) => f.debug_tuple("Ident").field(&ident).finish(),
+                LValue::FieldAccess(object, field) => f
+                    .debug_tuple("FieldAccess")
+                    .field(&object)
+                    .field(&field)
+                    .finish(),
+                LValue::ArrayAccess(array, index) => f
+                    .debug_tuple("ArrayAccess")
+                    .field(&array)
+                    .field(&index)
+                    .finish(),
             }
         }
     }

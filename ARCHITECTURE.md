@@ -3,11 +3,11 @@
 The compiler follows a straightforward compiler architecture.
 
 ```
-  ---------                   ----------                --------------
-  |       |                   |        |                |            |
-  | Lexer | -- Vec<Token> --> | Parser | -- Program --> | Translator |
-  |       |                   |        |                |            |
-  ---------                   ----------                --------------
+  ---------                   ----------                ---------------------
+  |       |                   |        |                |                   |
+  | Lexer | -- Vec<Token> --> | Parser | -- Program --> | Semantic Analyzer |
+  |       |                   |        |                |                   |
+  ---------                   ----------                ---------------------
 
 Lexer - compiler/tig-syntax/src/lexer.rs - tokenize*
 
@@ -17,7 +17,7 @@ Parser - compiler/tig-syntax/src/parser.rs - parse*
 
 Program - compiler/tig-syntax/src/ast.rs
 
-Translator - compiler/tig-semant/src/translate.rs - translate_program
+Semantic Analyzer - compiler/tig-semant/src/semant.rs - translate_program
 ```
 
 There is another important module, `compiler/tig-compiler/src/lib.rs`, which contains an orchestrator for calling the entire pipeline. And the main binary is in `compiler/tig-driver/src/main.rs`.
@@ -41,21 +41,7 @@ The compiler loads each file used into a `SourceFile`, which are compiled in `So
     2.4.1. If the error occurred while parsing declarations, it logs the error, then it ignores tokens until it finds one that can start another declaration.
     2.4.2. If the error happens in an expr, it logs the error and returns.
 3. The compiled `Program` is sent to `translate_program` for typechecking.
-  3.1. The translator recursively translates every expr, declaration and type.
+  3.1. The semantic analyzer recursively translates every expr, declaration and type.
   3.2. In case of an error.
     3.2.1. It logs an error
     3.2.2. It either returns the expected type (e.g. int for +, -, etc.), or it returns a special type `hole`, which indicates an error, but typecheks with every other type to prevent cascading more errors.
-
-
-### Quirks
-
-* Records and arrays don't contain their original names, and since tiger uses nominal typing, comparing two identical, but not the same types, will output something like `Expected type '{a: int}', got '{a: int}'`.
-* Error reporting is underdeveloped, it cannnot output erros spanning multiple lines.
-* Importing a file inserts transparently the new tokens into the token stream. This allows declarations to span multiple files, since it can start at the beginning of the imported file, and continue in the importing file. This also messes up with error reporting.
-* Types don't contain their original declaration spans, it might be possible that some errors are reported on lines where the don't belong (I haven't come accross this).
-
-### Improvements
-
-* The typechecker stores the types using reference counting, self referential types cause memory leaks.
-* The unit type `()` is represented in the AST as an empty list of exprs `Exprs(Vec<Expr>)`. Could be its own node.
-* A parenthesized expression is a list of exprs with one element. Could be its own node.

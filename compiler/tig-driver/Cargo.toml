@@ -13,3 +13,4 @@ tig-error = { path = "../tig-error" }
 tig-compiler = { path = "../tig-compiler" }
 tig-syntax = { path = "../tig-syntax" }
 tig-semant = { path = "../tig-semant" }
+tig-arch = { path = "../tig-arch" }

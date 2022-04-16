@@ -1,7 +1,5 @@
 use std::collections::HashMap;
 
-//#![allow(dead_code)]
-//#![allow(unused_variables)]
 use tig_common::SmolStr;
 use tig_syntax::ast;
 

@@ -1,6 +1,7 @@
 use std::rc::Rc;
 
-use tig_common::Span;
+use tig_arch::Frame;
+use tig_common::{temp::Label, Span};
 use tig_error::SpannedError;
 use tig_syntax::ast;
 
@@ -18,15 +19,15 @@ macro_rules! E {
     };
 }
 
-impl Translator {
+impl<F: Frame + PartialEq + Eq> Translator<F> {
     /// Translates a list of declarations, creating new value and type environments and returning
     /// them.
     pub(super) fn translate_decs<'venv, 'tenv>(
         &mut self,
         decs: Vec<ast::Dec>,
-        venv: &'venv VEnv<'venv>,
+        venv: &'venv VEnv<'venv, F>,
         tenv: &'tenv TEnv<'tenv>,
-    ) -> (VEnv<'venv>, TEnv<'tenv>) {
+    ) -> (VEnv<'venv, F>, TEnv<'tenv>) {
         let mut venv = venv.new_child();
         let mut tenv = tenv.new_child();
 
@@ -38,7 +39,7 @@ impl Translator {
     }
 
     /// Translates a declaration, modifying `venv` and `tenv` in place.
-    fn translate_dec(&mut self, dec: ast::Dec, venv: &mut VEnv, tenv: &mut TEnv) {
+    fn translate_dec(&mut self, dec: ast::Dec, venv: &mut VEnv<F>, tenv: &mut TEnv) {
         let ast::Dec {
             kind: dec_kind,
             span,
@@ -47,8 +48,11 @@ impl Translator {
             ast::DecKind::Type(typedecs) => self.translate_typedecs(span, typedecs, tenv),
 
             ast::DecKind::Variable {
-                name, ty, value, ..
-            } => self.translate_variable_dec(name, ty, *value, venv, tenv),
+                name,
+                escape,
+                ty,
+                value,
+            } => self.translate_variable_dec(name, escape, ty, *value, venv, tenv),
 
             ast::DecKind::Function(funcs) => self.translate_functions(funcs, venv, tenv),
 
@@ -162,13 +166,15 @@ impl Translator {
     fn translate_variable_dec(
         &mut self,
         name: ast::Ident,
+        escape: bool,
         ty: Option<ast::Ident>,
         value: ast::Expr,
-        venv: &mut VEnv,
+        venv: &mut VEnv<F>,
         tenv: &mut TEnv,
     ) {
         let value_span = value.span;
         let value = self.translate_expr(value, venv, tenv);
+        let _access = self.current_level.alloc_local(escape);
         let ty = match ty {
             Some(ty) => self.resolve_ty(&ty.value, ty.span, tenv, true),
             None => match &*value.ty {
@@ -198,7 +204,7 @@ impl Translator {
     fn translate_functions(
         &mut self,
         funcs: Vec<ast::FunctionDec>,
-        venv: &mut VEnv,
+        venv: &mut VEnv<F>,
         tenv: &mut TEnv,
     ) {
         let mut processed_funcs = vec![];
@@ -214,35 +220,55 @@ impl Translator {
 
             let mut processed_params = vec![];
             let mut formals = vec![];
+            let mut escapes = vec![true]; // Static link
             for p in parameters {
-                let ast::Field { name, ty, .. } = p;
+                let ast::Field { name, ty, escape } = p;
                 let p_ty = self.resolve_ty(&ty.value, ty.span, tenv, true);
                 processed_params.push((name, Rc::clone(&p_ty)));
                 formals.push(p_ty);
+                escapes.push(escape);
             }
 
             let result = ret_ty
                 .map(|ty| self.resolve_ty(&ty.value, ty.span, tenv, true))
                 .unwrap_or_else(Type::unit);
 
-            venv.enter(
-                name.value.clone(),
-                ValEntry::Function {
-                    formals,
-                    result: Rc::clone(&result),
-                },
-            );
+            let mut generate = true;
+            let mut label = Label::named(name.value.as_str());
+            if name.value == "_main" {
+                if self.has_main {
+                    E!(self, name.span, "Cannot redeclare _main function.",);
+                    generate = false;
+                } else {
+                    self.has_main = true;
+                    label = Label::raw("_main");
+                }
+            }
+            let level = self.current_level.new_level(label.clone(), escapes);
 
-            processed_funcs.push((processed_params, body, result));
+            if generate {
+                venv.enter(
+                    name.value.clone(),
+                    ValEntry::Function {
+                        level: level.clone(),
+                        label,
+                        formals,
+                        result: Rc::clone(&result),
+                    },
+                );
+            }
+
+            processed_funcs.push((processed_params, body, result, level));
         }
 
-        for (params, body, expected_result) in processed_funcs {
+        for (params, body, expected_result, level) in processed_funcs {
             let mut venv = venv.new_child();
 
             for (name, ty) in params {
                 venv.enter(name.value, ValEntry::Variable { ty });
             }
 
+            let current_level = std::mem::replace(&mut self.current_level, level);
             let body_span = body.span;
             let body_ty = self.translate_expr(*body, &venv, tenv);
 
@@ -255,6 +281,7 @@ impl Translator {
                     body_ty.ty,
                 );
             }
+            self.current_level = current_level;
         }
     }
 
@@ -263,7 +290,7 @@ impl Translator {
         name: ast::Ident,
         parameters: Vec<ast::TyField>,
         ret_ty: Option<ast::Ident>,
-        venv: &mut VEnv,
+        venv: &mut VEnv<F>,
         tenv: &mut TEnv,
     ) {
         let formals = parameters
@@ -276,13 +303,30 @@ impl Translator {
             None => Type::unit(),
         };
 
-        venv.enter(name.value, ValEntry::Function { formals, result });
+        if name.value == "_main" {
+            E!(self, name.span, "Cannot declare a primitive as _main.",);
+        } else {
+            let label = Label::raw(name.value.as_str());
+            let level = self
+                .current_level
+                .new_level(label.clone(), vec![false; formals.len()]);
+            venv.enter(
+                name.value,
+                ValEntry::Function {
+                    level,
+                    label,
+                    formals,
+                    result,
+                },
+            );
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use expect_test::{expect, Expect};
+    use tig_arch::amd64::Amd64Frame;
 
     use crate::translate_program;
 
@@ -291,7 +335,7 @@ mod tests {
     fn check(program: &str, expected: Expect) {
         let (_, p) = parse_str(program);
         assert_eq!(p.errors, vec![]);
-        let result = translate_program(p.program.expect("Should have compiled"));
+        let result = translate_program::<Amd64Frame>(p.program.expect("Should have compiled"));
         assert_eq!(result.errors, vec![]);
         expected.assert_debug_eq(&result.expty);
     }
@@ -299,7 +343,7 @@ mod tests {
     fn check_err(program: &str, expected: Vec<Expect>) {
         let (_, p) = parse_str(program);
         assert_eq!(p.errors, vec![]);
-        let result = translate_program(p.program.expect("Should have compiled"));
+        let result = translate_program::<Amd64Frame>(p.program.expect("Should have compiled"));
         for (r, e) in result.errors.iter().zip(expected.iter()) {
             e.assert_eq(&format!("{}", r));
         }
@@ -416,6 +460,24 @@ mod tests {
                 expect![[r#"(119, 122): Expected function to return 'string', got 'int'"#]],
                 expect![[r#"(156, 159): Function 'a' expects 1 argument, 0 given"#]],
                 expect![[r#"(154, 160): Function 'b' expects 2 arguments, 1 given"#]],
+            ],
+        );
+    }
+
+    #[test]
+    fn test_tyc_error_main() {
+        check_err(
+            r#"
+            let
+                primitive _main()
+                function _main() = ()
+            in
+                nil
+            end
+            "#,
+            vec![
+                expect![[r#"(43, 48): Cannot declare a primitive as _main."#]],
+                expect![[r#"(76, 81): Cannot redeclare _main function."#]],
             ],
         );
     }
