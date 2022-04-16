@@ -1,3 +1,4 @@
+pub mod escape;
 pub mod translate;
 pub mod types;
 
