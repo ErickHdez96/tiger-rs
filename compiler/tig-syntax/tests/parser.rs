@@ -26,64 +26,64 @@ fn test_parser_import() {
         imported_file.path().to_string_lossy()
     );
 
-    write!(imported_file, "{}", imported).expect("shuld write to imported file");
-    write!(main_program_file, "{}", main_program).expect("shuld write to main program file");
+    write!(imported_file, "{}", imported.trim()).expect("shuld write to imported file");
+    write!(main_program_file, "{}", main_program.trim()).expect("shuld write to main program file");
 
     let (_, result) = parse_file(main_program_file.path()).expect("should parse the file");
     let expected = expect![[r#"
-        9..189: Expr
-          9..189: Let
-            25..141: Decs
-              25..35: VarDec - Escape(false)
-                29..30: Variable(a)
-                34..35: Value
-                  34..35: Integer(1)
-              203..314: Functions
-                212..314: Function
-                  212..221: Name(factorial)
-                  222..228: Parameters
-                    222..223: Name(x) - 225..228: Type(int) - Escape(false)
-                  231..234: ReturnType(int)
-                  249..314: Body
-                    249..314: If
-                      252..257: Condition
-                        252..257: BinaryOp(=)
-                          252..253: Left
-                            252..253: LValue
-                              252..253: Ident(x)
-                          256..257: Right
-                            256..257: Integer(0)
-                      275..276: Then
-                        275..276: Integer(1)
-                      294..314: Else
-                        294..314: BinaryOp(*)
-                          294..295: Left
-                            294..295: LValue
-                              294..295: Ident(x)
-                          298..314: Right
-                            298..314: Call
-                              298..307: Func(factorial)
-                              308..313: Arguments
-                                308..313: BinaryOp(-)
-                                  308..309: Left
-                                    308..309: LValue
-                                      308..309: Ident(x)
-                                  312..313: Right
-                                    312..313: Integer(1)
-              129..141: TypeDecs
-                129..141: TypeDec
-                  134..135: TypeName
-                    134..135: Ident(b)
-                  138..141: Type
-                    138..141: TypeId(int)
-            165..177: Expr
-              165..177: Exprs
-                165..177: Expr
-                  165..177: Call
-                    165..174: Func(factorial)
-                    175..176: Arguments
-                      175..176: LValue
-                        175..176: Ident(a)
+        0..136: Expr
+          0..136: Let
+            16..88: Decs
+              16..26: VarDec - Escape(false)
+                20..21: Variable(a)
+                25..26: Value
+                  25..26: Integer(1)
+              136..247: Functions
+                145..247: Function
+                  145..154: Name(factorial)
+                  155..161: Parameters
+                    155..156: Name(x) - 158..161: Type(int) - Escape(false)
+                  164..167: ReturnType(int)
+                  182..247: Body
+                    182..247: If
+                      185..190: Condition
+                        185..190: BinaryOp(=)
+                          185..186: Left
+                            185..186: LValue
+                              185..186: Ident(x)
+                          189..190: Right
+                            189..190: Integer(0)
+                      208..209: Then
+                        208..209: Integer(1)
+                      227..247: Else
+                        227..247: BinaryOp(*)
+                          227..228: Left
+                            227..228: LValue
+                              227..228: Ident(x)
+                          231..247: Right
+                            231..247: Call
+                              231..240: Func(factorial)
+                              241..246: Arguments
+                                241..246: BinaryOp(-)
+                                  241..242: Left
+                                    241..242: LValue
+                                      241..242: Ident(x)
+                                  245..246: Right
+                                    245..246: Integer(1)
+              76..88: TypeDecs
+                76..88: TypeDec
+                  81..82: TypeName
+                    81..82: Ident(b)
+                  85..88: Type
+                    85..88: TypeId(int)
+            112..124: Expr
+              112..124: Exprs
+                112..124: Expr
+                  112..124: Call
+                    112..121: Func(factorial)
+                    122..123: Arguments
+                      122..123: LValue
+                        122..123: Ident(a)
     "#]];
     expected.assert_debug_eq(&result.program.expect("should have compiled"));
 }
