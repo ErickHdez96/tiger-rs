@@ -187,7 +187,6 @@ impl<'s> Parser<'s> {
 
             Token { kind: T!['('], .. } => self.parse_exprs(),
 
-            // TODO: String
             Token { kind, span } => {
                 let error =
                     SpannedError::new(format!("Expected an expression, got '{}'", kind,), *span);
