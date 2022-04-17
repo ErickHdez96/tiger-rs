@@ -1,4 +1,4 @@
-use std::cell::Cell;
+use std::{cell::Cell, fmt};
 
 use smol_str::SmolStr;
 
@@ -41,6 +41,15 @@ impl Default for Label {
     }
 }
 
+impl fmt::Display for Label {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Generated(n) => n.fmt(f),
+            Self::Raw(s) | Self::Named(s) => s.fmt(f),
+        }
+    }
+}
+
 /// A Temp is similar to a register. But we are allowed to allocate an infinite number of Temps.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Temp {
@@ -67,6 +76,15 @@ impl Temp {
 impl Default for Temp {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl fmt::Display for Temp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Generated(n) => n.fmt(f),
+            Self::Named(s) => s.fmt(f),
+        }
     }
 }
 

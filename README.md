@@ -1,6 +1,6 @@
 # Tiger compiler
 
-Compiler for the tiger languaged, based on the book `Modern Compiler Implementation in ML`. There should be a branch for each important part of the implemenation.
+Compiler for the tiger languaged, based on the book `Modern Compiler Implementation in ML`.
 
 ## Example
 
@@ -11,7 +11,6 @@ Compiler for the tiger languaged, based on the book `Modern Compiler Implementat
 
 * Records and arrays don't contain their original names, and since tiger uses nominal typing, comparing two identical, but not the same types, will output something like `Expected type '{a: int}', got '{a: int}'`.
 * Error reporting is underdeveloped, it cannnot output erros spanning multiple lines.
-* Importing a file inserts transparently the new tokens into the token stream. This allows declarations to span multiple files, since it can start at the beginning of the imported file, and continue in the importing file. This also messes up with error reporting.
 * Types don't contain their original declaration spans, it might be possible that some errors are reported on lines where the don't belong (I haven't come accross this).
 * The semantic analyzer has functions beginning with `translate`, but there is also a translate module, I decided to go with the naming in the book.
 
@@ -22,3 +21,6 @@ Compiler for the tiger languaged, based on the book `Modern Compiler Implementat
 * A parenthesized expression is a list of exprs with one element. Could be its own node.
 * When creating a Frame, a static link is passed to all of them, but not all of them need one.
 * Support more formals than can be passed through registers (support formals that have to be passed in memory).
+
+TODO tomorrow:
+ * External calls (page 170)

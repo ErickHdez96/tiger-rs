@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
 use clap::Parser;
-use tig_arch::{amd64::Amd64Frame, Frame};
 use tig_compiler::Compiler;
+use tig_semant::frame::{amd64::Amd64Frame, Frame};
 use tig_syntax::ast;
 
 #[derive(Debug, Parser)]

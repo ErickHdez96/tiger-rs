@@ -10,4 +10,3 @@ tig-common = { path = "../tig-common" }
 tig-error = { path = "../tig-error" }
 tig-syntax = { path = "../tig-syntax" }
 tig-semant = { path = "../tig-semant" }
-tig-arch = { path = "../tig-arch" }

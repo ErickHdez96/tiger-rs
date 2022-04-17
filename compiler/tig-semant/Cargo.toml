@@ -9,7 +9,6 @@ log = "0.4"
 tig-common = { path = "../tig-common" }
 tig-error = { path = "../tig-error" }
 tig-syntax = { path = "../tig-syntax" }
-tig-arch = { path = "../tig-arch" }
 
 [dev-dependencies]
 expect-test = "1"

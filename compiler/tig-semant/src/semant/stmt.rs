@@ -1,11 +1,13 @@
 use std::rc::Rc;
 
-use tig_arch::Frame;
 use tig_common::{temp::Label, Span};
 use tig_error::SpannedError;
 use tig_syntax::ast;
 
-use crate::{RType, Type};
+use crate::{
+    translate::{self as tx, TExpr},
+    Frame, RType, Type,
+};
 
 use super::{TEnv, Translator, VEnv, ValEntry};
 
@@ -19,7 +21,7 @@ macro_rules! E {
     };
 }
 
-impl<F: Frame + PartialEq + Eq> Translator<F> {
+impl<F: Frame> Translator<F> {
     /// Translates a list of declarations, creating new value and type environments and returning
     /// them.
     pub(super) fn translate_decs<'venv, 'tenv>(
@@ -27,40 +29,92 @@ impl<F: Frame + PartialEq + Eq> Translator<F> {
         decs: Vec<ast::Dec>,
         venv: &'venv VEnv<'venv, F>,
         tenv: &'tenv TEnv<'tenv>,
-    ) -> (VEnv<'venv, F>, TEnv<'tenv>) {
+    ) -> (VEnv<'venv, F>, TEnv<'tenv>, Vec<TExpr>) {
         let mut venv = venv.new_child();
         let mut tenv = tenv.new_child();
+        let mut stmts = vec![];
 
         for dec in decs {
-            self.translate_dec(dec, &mut venv, &mut tenv);
+            if let Some(stmt) = self.translate_dec(dec, &mut venv, &mut tenv) {
+                stmts.push(stmt);
+            }
         }
 
-        (venv, tenv)
+        (venv, tenv, stmts)
     }
 
     /// Translates a declaration, modifying `venv` and `tenv` in place.
-    fn translate_dec(&mut self, dec: ast::Dec, venv: &mut VEnv<F>, tenv: &mut TEnv) {
+    fn translate_dec(
+        &mut self,
+        dec: ast::Dec,
+        venv: &mut VEnv<F>,
+        tenv: &mut TEnv,
+    ) -> Option<TExpr> {
         let ast::Dec {
             kind: dec_kind,
             span,
         } = dec;
         match dec_kind {
-            ast::DecKind::Type(typedecs) => self.translate_typedecs(span, typedecs, tenv),
+            ast::DecKind::Type(typedecs) => {
+                self.translate_typedecs(span, typedecs, tenv);
+                None
+            }
 
             ast::DecKind::Variable {
                 name,
                 escape,
                 ty,
                 value,
-            } => self.translate_variable_dec(name, escape, ty, *value, venv, tenv),
+            } => {
+                let value_span = value.span;
+                let value = self.translate_expr(*value, venv, tenv);
+                let access = self.current_level.alloc_local(escape);
+                let ty = match ty {
+                    Some(ty) => self.resolve_ty(&ty.value, ty.span, tenv, true),
+                    None => match &*value.ty {
+                        Type::Nil => {
+                            E!(
+                                self,
+                                value_span,
+                                "Cannot assign nil to a variable without a specified type",
+                            );
+                            Type::hole()
+                        }
+                        _ => Rc::clone(&value.ty),
+                    },
+                };
+                if ty != self.actual_ty(&value.ty, value_span, tenv) {
+                    E!(
+                        self,
+                        value_span,
+                        "Expected type '{}', got '{}'",
+                        ty,
+                        value.ty
+                    );
+                }
+                venv.enter(
+                    name.value,
+                    ValEntry::Variable {
+                        access: access.clone(),
+                        ty,
+                    },
+                );
+                Some(tx::var_dec::<F>(span, &access, value.exp))
+            }
 
-            ast::DecKind::Function(funcs) => self.translate_functions(funcs, venv, tenv),
+            ast::DecKind::Function(funcs) => {
+                self.translate_functions(funcs, venv, tenv);
+                None
+            }
 
             ast::DecKind::Primitive {
                 name,
                 parameters,
                 ret_ty,
-            } => self.translate_primitive(name, parameters, ret_ty, venv, tenv),
+            } => {
+                self.translate_primitive(name, parameters, ret_ty, venv, tenv);
+                None
+            }
         }
     }
 
@@ -163,44 +217,6 @@ impl<F: Frame + PartialEq + Eq> Translator<F> {
         }
     }
 
-    fn translate_variable_dec(
-        &mut self,
-        name: ast::Ident,
-        escape: bool,
-        ty: Option<ast::Ident>,
-        value: ast::Expr,
-        venv: &mut VEnv<F>,
-        tenv: &mut TEnv,
-    ) {
-        let value_span = value.span;
-        let value = self.translate_expr(value, venv, tenv);
-        let _access = self.current_level.alloc_local(escape);
-        let ty = match ty {
-            Some(ty) => self.resolve_ty(&ty.value, ty.span, tenv, true),
-            None => match &*value.ty {
-                Type::Nil => {
-                    E!(
-                        self,
-                        value_span,
-                        "Cannot assign nil to a variable without a specified type",
-                    );
-                    Type::hole()
-                }
-                _ => Rc::clone(&value.ty),
-            },
-        };
-        if ty != self.actual_ty(&value.ty, value_span, tenv) {
-            E!(
-                self,
-                value_span,
-                "Expected type '{}', got '{}'",
-                ty,
-                value.ty
-            );
-        }
-        venv.enter(name.value, ValEntry::Variable { ty });
-    }
-
     fn translate_functions(
         &mut self,
         funcs: Vec<ast::FunctionDec>,
@@ -211,11 +227,11 @@ impl<F: Frame + PartialEq + Eq> Translator<F> {
 
         for f in funcs {
             let ast::FunctionDec {
+                span,
                 name,
                 parameters,
                 ret_ty,
                 body,
-                ..
             } = f;
 
             let mut processed_params = vec![];
@@ -250,6 +266,7 @@ impl<F: Frame + PartialEq + Eq> Translator<F> {
                 venv.enter(
                     name.value.clone(),
                     ValEntry::Function {
+                        is_primitive: false,
                         level: level.clone(),
                         label,
                         formals,
@@ -258,14 +275,16 @@ impl<F: Frame + PartialEq + Eq> Translator<F> {
                 );
             }
 
-            processed_funcs.push((processed_params, body, result, level));
+            processed_funcs.push((processed_params, body, result, level, span));
         }
 
-        for (params, body, expected_result, level) in processed_funcs {
+        for (params, body, expected_result, level, span) in processed_funcs {
             let mut venv = venv.new_child();
 
-            for (name, ty) in params {
-                venv.enter(name.value, ValEntry::Variable { ty });
+            // Skip the static link
+            for ((name, ty), access) in params.into_iter().zip(level.formals().into_iter().skip(1))
+            {
+                venv.enter(name.value, ValEntry::Variable { access, ty });
             }
 
             let current_level = std::mem::replace(&mut self.current_level, level);
@@ -281,6 +300,7 @@ impl<F: Frame + PartialEq + Eq> Translator<F> {
                     body_ty.ty,
                 );
             }
+            tx::fn_::<F>(span, &mut self.fragments, &self.current_level, body_ty.exp);
             self.current_level = current_level;
         }
     }
@@ -313,6 +333,7 @@ impl<F: Frame + PartialEq + Eq> Translator<F> {
             venv.enter(
                 name.value,
                 ValEntry::Function {
+                    is_primitive: true,
                     level,
                     label,
                     formals,
@@ -326,18 +347,30 @@ impl<F: Frame + PartialEq + Eq> Translator<F> {
 #[cfg(test)]
 mod tests {
     use expect_test::{expect, Expect};
-    use tig_arch::amd64::Amd64Frame;
 
-    use crate::translate_program;
+    use crate::{frame::amd64::Amd64Frame, translate_program};
 
     use tig_syntax::parse_str;
 
-    fn check(program: &str, expected: Expect) {
+    //fn check(program: &str, expected: Expect) {
+    //    let (_, p) = parse_str(program);
+    //    assert_eq!(p.errors, vec![]);
+    //    let result = translate_program::<Amd64Frame>(p.program.expect("Should have compiled"));
+    //    assert_eq!(result.errors, vec![]);
+    //    expected.assert_debug_eq(&result.expty);
+    //}
+
+    fn check_fragments(program: &str, fragments: Vec<Expect>) {
         let (_, p) = parse_str(program);
         assert_eq!(p.errors, vec![]);
         let result = translate_program::<Amd64Frame>(p.program.expect("Should have compiled"));
         assert_eq!(result.errors, vec![]);
-        expected.assert_debug_eq(&result.expty);
+        let rf_len = result.fragments.len();
+        let ef_len = fragments.len();
+        for (f, e) in result.fragments.into_iter().zip(fragments.into_iter()) {
+            e.assert_debug_eq(&f);
+        }
+        assert_eq!(rf_len, ef_len);
     }
 
     fn check_err(program: &str, expected: Vec<Expect>) {
@@ -352,30 +385,60 @@ mod tests {
 
     #[test]
     fn test_tyc_variable_declaration() {
-        check(
+        check_fragments(
             "let var a := 1 in a end",
-            expect![[r#"
-                ExpTy {
-                    exp: (),
-                    ty: Int,
-                }
-            "#]],
+            vec![expect![[r#"
+                    0..23: Procedure
+                      Frame(_main) - 0
+                      0..23: Move
+                        0..23: Destination
+                          0..23: Temp(rv)
+                        0..23: Source
+                          0..23: ESeq
+                            4..14: Stmt
+                              4..14: Move
+                                4..14: Destination
+                                  4..14: Temp(0)
+                                13..14: Source
+                                  13..14: Const(1)
+                            18..19: Expr
+                              18..19: Temp(0)
+                "#]]],
         );
 
-        check(
-            "let var a: int := 1 var b := a in b end",
-            expect![[r#"
-                ExpTy {
-                    exp: (),
-                    ty: Int,
-                }
-            "#]],
+        check_fragments(
+            "let var a: int := 2 var b := a in b end",
+            vec![expect![[r#"
+                    0..39: Procedure
+                      Frame(_main) - 0
+                      0..39: Move
+                        0..39: Destination
+                          0..39: Temp(rv)
+                        0..39: Source
+                          0..39: ESeq
+                            0..39: Stmt
+                              0..39: Seq
+                                4..19: Stmt1
+                                  4..19: Move
+                                    4..19: Destination
+                                      4..19: Temp(1)
+                                    18..19: Source
+                                      18..19: Const(2)
+                                20..30: Stmt2
+                                  20..30: Move
+                                    20..30: Destination
+                                      20..30: Temp(2)
+                                    29..30: Source
+                                      29..30: Temp(1)
+                            34..35: Expr
+                              34..35: Temp(2)
+                "#]]],
         );
     }
 
     #[test]
     fn test_tyc_function_declaration() {
-        check(
+        check_fragments(
             r#"
             let
                 function add(x: int, y: int): int = x + y
@@ -383,15 +446,43 @@ mod tests {
                 add(1, 2)
             end
             "#,
-            expect![[r#"
-                ExpTy {
-                    exp: (),
-                    ty: Int,
-                }
-            "#]],
+            vec![
+                expect![[r#"
+                    33..74: Procedure
+                      Frame(add0) - -8
+                        Formals
+                          InFrame(-8)
+                          Reg(Temp(0))
+                          Reg(Temp(1))
+                      33..74: Move
+                        33..74: Destination
+                          33..74: Temp(rv)
+                        69..74: Source
+                          69..74: BinOp(+)
+                            69..70: Left
+                              69..70: Temp(0)
+                            73..74: Right
+                              73..74: Temp(1)
+                "#]],
+                expect![[r#"
+                    106..115: Procedure
+                      Frame(_main) - 0
+                      106..115: Move
+                        106..115: Destination
+                          106..115: Temp(rv)
+                        106..115: Source
+                          106..115: Call
+                            106..115: Function
+                              106..115: Name(add0)
+                            106..114: Arguments
+                              106..115: Temp(fp)
+                              110..111: Const(1)
+                              113..114: Const(2)
+                "#]],
+            ],
         );
 
-        check(
+        check_fragments(
             r#"
             let
                 function a() = b()
@@ -400,15 +491,66 @@ mod tests {
                 a()
             end
             "#,
-            expect![[r#"
-                ExpTy {
-                    exp: (),
-                    ty: Unit,
-                }
-            "#]],
+            vec![
+                expect![[r#"
+                33..51: Procedure
+                  Frame(a1) - -8
+                    Formals
+                      InFrame(-8)
+                  33..51: Move
+                    33..51: Destination
+                      33..51: Temp(rv)
+                    48..51: Source
+                      48..51: Call
+                        48..51: Function
+                          48..51: Name(b2)
+                        48..51: Arguments
+                          48..51: Mem
+                            48..51: Expr
+                              48..51: BinOp(-)
+                                48..51: Left
+                                  48..51: Temp(fp)
+                                48..51: Right
+                                  48..51: Const(8)
+                "#]],
+                expect![[r#"
+                68..86: Procedure
+                  Frame(b2) - -8
+                    Formals
+                      InFrame(-8)
+                  68..86: Move
+                    68..86: Destination
+                      68..86: Temp(rv)
+                    83..86: Source
+                      83..86: Call
+                        83..86: Function
+                          83..86: Name(a1)
+                        83..86: Arguments
+                          83..86: Mem
+                            83..86: Expr
+                              83..86: BinOp(-)
+                                83..86: Left
+                                  83..86: Temp(fp)
+                                83..86: Right
+                                  83..86: Const(8)
+                "#]],
+                expect![[r#"
+                    118..121: Procedure
+                      Frame(_main) - 0
+                      118..121: Move
+                        118..121: Destination
+                          118..121: Temp(rv)
+                        118..121: Source
+                          118..121: Call
+                            118..121: Function
+                              118..121: Name(a1)
+                            118..121: Arguments
+                              118..121: Temp(fp)
+                "#]],
+            ],
         );
 
-        check(
+        check_fragments(
             r#"
             let
                 function a(c: int): int = b(c - 1)
@@ -417,12 +559,76 @@ mod tests {
                 a(1)
             end
             "#,
-            expect![[r#"
-                ExpTy {
-                    exp: (),
-                    ty: Int,
-                }
-            "#]],
+            vec![
+                expect![[r#"
+                    33..67: Procedure
+                      Frame(a3) - -8
+                        Formals
+                          InFrame(-8)
+                          Reg(Temp(2))
+                      33..67: Move
+                        33..67: Destination
+                          33..67: Temp(rv)
+                        59..67: Source
+                          59..67: Call
+                            59..67: Function
+                              59..67: Name(b4)
+                            59..66: Arguments
+                              59..67: Mem
+                                59..67: Expr
+                                  59..67: BinOp(-)
+                                    59..67: Left
+                                      59..67: Temp(fp)
+                                    59..67: Right
+                                      59..67: Const(8)
+                              61..66: BinOp(-)
+                                61..62: Left
+                                  61..62: Temp(2)
+                                65..66: Right
+                                  65..66: Const(1)
+                "#]],
+                expect![[r#"
+                    84..118: Procedure
+                      Frame(b4) - -8
+                        Formals
+                          InFrame(-8)
+                          Reg(Temp(3))
+                      84..118: Move
+                        84..118: Destination
+                          84..118: Temp(rv)
+                        110..118: Source
+                          110..118: Call
+                            110..118: Function
+                              110..118: Name(a3)
+                            110..117: Arguments
+                              110..118: Mem
+                                110..118: Expr
+                                  110..118: BinOp(-)
+                                    110..118: Left
+                                      110..118: Temp(fp)
+                                    110..118: Right
+                                      110..118: Const(8)
+                              112..117: BinOp(+)
+                                112..113: Left
+                                  112..113: Temp(3)
+                                116..117: Right
+                                  116..117: Const(1)
+                "#]],
+                expect![[r#"
+                    150..154: Procedure
+                      Frame(_main) - 0
+                      150..154: Move
+                        150..154: Destination
+                          150..154: Temp(rv)
+                        150..154: Source
+                          150..154: Call
+                            150..154: Function
+                              150..154: Name(a3)
+                            150..153: Arguments
+                              150..154: Temp(fp)
+                              152..153: Const(1)
+                "#]],
+            ],
         );
     }
 

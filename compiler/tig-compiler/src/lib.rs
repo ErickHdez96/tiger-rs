@@ -1,9 +1,8 @@
 use std::{io::Read, marker::PhantomData, path::PathBuf};
 
-use tig_arch::Frame;
 use tig_common::SourceCode;
 use tig_error::SpannedError;
-use tig_semant::{translate_program, ExpTy, TranslateResult};
+use tig_semant::{frame::Fragment, translate_program, Frame, TranslateResult};
 use tig_syntax::{ast, parser::parse_source_code, ParseResult};
 
 #[derive(Debug)]
@@ -25,7 +24,7 @@ impl<F: Frame> Default for Compiler<F> {
 
 type CResult<T> = Result<T, Vec<SpannedError>>;
 
-impl<F: Frame + PartialEq + Eq> Compiler<F> {
+impl<F: Frame> Compiler<F> {
     pub fn add_file(mut self, file: impl Into<PathBuf>) -> std::io::Result<Self> {
         self.source_code.add_file(file)?;
         Ok(self)
@@ -53,11 +52,15 @@ impl<F: Frame + PartialEq + Eq> Compiler<F> {
         }
     }
 
-    fn translate(&mut self, ast: ast::Program) -> CResult<ExpTy> {
-        let TranslateResult { expty, mut errors } = translate_program::<F>(ast);
+    fn translate(&mut self, ast: ast::Program) -> CResult<Vec<Fragment<F>>> {
+        let TranslateResult {
+            fragments,
+            mut errors,
+            ..
+        } = translate_program::<F>(ast);
 
         if errors.is_empty() {
-            Ok(expty)
+            Ok(fragments)
         } else {
             self.errors.append(&mut errors);
             Err(std::mem::take(&mut self.errors))

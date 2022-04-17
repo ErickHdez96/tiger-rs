@@ -36,6 +36,10 @@ pub enum Type {
 }
 
 impl Type {
+    pub fn is_unit(&self) -> bool {
+        matches!(self, Type::Unit)
+    }
+
     pub fn int() -> RType {
         INT_TYPE.with(|i| i.clone())
     }
