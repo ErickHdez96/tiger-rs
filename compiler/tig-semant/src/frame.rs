@@ -16,7 +16,7 @@ use tig_common::{
     Span,
 };
 
-use crate::{ir, translate::level};
+use crate::ir;
 
 /// A Frame represents the frame view of a function. The formals being the parameters it receives.
 /// A function has to decide if it will store its variables on registers, or in memory at a
@@ -56,8 +56,6 @@ pub trait Frame: Debug + Clone + PartialEq + Eq {
 
     /// Return value register
     fn rv() -> Temp;
-
-    fn proc_entry_exit(&self, level: &level::Level<Self>, body: Box<ir::Expr>);
 
     /// Adds required information to the prologue and epiloque of a Frame.
     ///

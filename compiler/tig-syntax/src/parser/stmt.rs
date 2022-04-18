@@ -393,7 +393,7 @@ mod tests {
                 0..34: Decs
                   0..34: Primitive
                     10..13: Name(add)
-                    14..20: Parameters
+                    14..28: Parameters
                       14..15: Name(x) - 17..20: Type(int)
                       22..23: Name(y) - 25..28: Type(int)
                     31..34: ReturnType(int)

@@ -80,11 +80,7 @@ impl fmt::Debug for Expr {
                             "\n{}{}..{}: Arguments\n{}",
                             " ".repeat(width + 2),
                             arguments.get(0).map(|a| a.span.lo).unwrap_or_default(),
-                            arguments
-                                .iter()
-                                .last()
-                                .map(|a| a.span.hi)
-                                .unwrap_or_default(),
+                            arguments.last().map(|a| a.span.hi).unwrap_or_default(),
                             arguments
                                 .iter()
                                 .map(|a| format!("{:#width$?}", a, width = width + 4))
@@ -163,6 +159,40 @@ pub enum ExprKind {
 pub struct Stmt {
     pub span: Span,
     pub kind: StmtKind,
+}
+
+impl Stmt {
+    /// Tests whether it is an unconditional jump to a single label
+    /// (i.e. `jmp label, [label]`).
+    ///
+    /// It returns the label if true, or None if false.
+    pub fn is_simple_jmp(&self) -> Option<&Label> {
+        match &self.kind {
+            StmtKind::Jump {
+                destination,
+                targets,
+            } => match &destination.kind {
+                ExprKind::Name(l) => match targets.get(0) {
+                    Some(l2) if l == l2 => Some(l),
+                    _ => None,
+                },
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+}
+
+impl Default for Stmt {
+    fn default() -> Self {
+        Self {
+            span: Span::new(0, 1),
+            kind: StmtKind::Expr(Box::new(Expr {
+                span: Span::new(0, 1),
+                kind: ExprKind::Const(0),
+            })),
+        }
+    }
 }
 
 impl fmt::Debug for Stmt {
@@ -365,6 +395,25 @@ pub enum RelOp {
     Uge,
 }
 
+impl RelOp {
+    pub fn negate(self) -> Self {
+        use RelOp::*;
+
+        match self {
+            Eq => Neq,
+            Neq => Eq,
+            Lt => Ge,
+            Gt => Le,
+            Le => Gt,
+            Ge => Lt,
+            Ult => Uge,
+            Ule => Ugt,
+            Ugt => Ule,
+            Uge => Ult,
+        }
+    }
+}
+
 impl fmt::Display for RelOp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -416,7 +465,7 @@ macro_rules! IR {
             },
         })
     };
-    (e mem, $span:expr, $expr:expr, $(,)?) => {
+    (e mem, $span:expr, $expr:expr $(,)?) => {
         Box::new(ir::Expr {
             span: $span,
             kind: ir::ExprKind::Mem($expr),
@@ -456,6 +505,15 @@ macro_rules! IR {
             kind: ir::StmtKind::Jump {
                 destination: IR![e name, $span, $l.clone()],
                 targets: vec![$l],
+            }
+        })
+    };
+    (s jmp, $span:expr, $target:expr, $targets:expr $(,)?) => {
+        Box::new(ir::Stmt {
+            span: $span,
+            kind: ir::StmtKind::Jump {
+                destination: $target,
+                targets: $targets,
             }
         })
     };

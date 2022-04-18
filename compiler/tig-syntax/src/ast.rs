@@ -27,8 +27,8 @@ impl fmt::Debug for Program {
                     f,
                     "{}{}..{}: Decs\n{}",
                     padding,
-                    decs.iter().next().map(|s| s.span.lo).unwrap_or_default(),
-                    decs.iter().last().map(|s| s.span.hi).unwrap_or_default(),
+                    decs.get(0).map(|s| s.span.lo).unwrap_or_default(),
+                    decs.last().map(|s| s.span.hi).unwrap_or_default(),
                     decs.iter()
                         .map(|d| format!("{:#width$?}", d, width = width + 2))
                         .collect::<Vec<_>>()
@@ -113,16 +113,8 @@ impl fmt::Debug for Expr {
                         format!(
                             "\n{}{}..{}: Fields\n{}",
                             " ".repeat(width + 2),
-                            fields
-                                .iter()
-                                .next()
-                                .map(|f| f.field.span.lo)
-                                .unwrap_or_default(),
-                            fields
-                                .iter()
-                                .last()
-                                .map(|f| f.value.span.hi)
-                                .unwrap_or_default(),
+                            fields.get(0).map(|f| f.field.span.lo).unwrap_or_default(),
+                            fields.last().map(|f| f.value.span.hi).unwrap_or_default(),
                             fields
                                 .iter()
                                 .map(|f| format!("{:#width$?}", f, width = width + 4))
@@ -158,16 +150,8 @@ impl fmt::Debug for Expr {
                         format!(
                             "\n{}{}..{}: Arguments\n{}",
                             " ".repeat(width + 2),
-                            arguments
-                                .iter()
-                                .next()
-                                .map(|a| a.span.lo)
-                                .unwrap_or_default(),
-                            arguments
-                                .iter()
-                                .last()
-                                .map(|a| a.span.hi)
-                                .unwrap_or_default(),
+                            arguments.get(0).map(|a| a.span.lo).unwrap_or_default(),
+                            arguments.last().map(|a| a.span.hi).unwrap_or_default(),
                             arguments
                                 .iter()
                                 .map(|a| format!("{:#width$?}", a, width = width + 4))
@@ -343,8 +327,8 @@ impl fmt::Debug for Expr {
                         format!(
                             "\n{}{}..{}: Decs\n{}",
                             " ".repeat(width + 2),
-                            decs.iter().next().map(|d| d.span.lo).unwrap_or_default(),
-                            decs.iter().last().map(|d| d.span.hi).unwrap_or_default(),
+                            decs.get(0).map(|d| d.span.lo).unwrap_or_default(),
+                            decs.last().map(|d| d.span.hi).unwrap_or_default(),
                             decs.iter()
                                 .map(|d| format!("{:#width$?}", d, width = width + 4))
                                 .collect::<Vec<_>>()
@@ -755,15 +739,10 @@ impl fmt::Debug for Dec {
                             "\n{}{}..{}: Parameters\n{}",
                             " ".repeat(width + 2),
                             parameters
-                                .iter()
-                                .next()
+                                .get(0)
                                 .map(|p| p.name.span.lo)
                                 .unwrap_or_default(),
-                            parameters
-                                .iter()
-                                .next()
-                                .map(|p| p.ty.span.hi)
-                                .unwrap_or_default(),
+                            parameters.last().map(|p| p.ty.span.hi).unwrap_or_default(),
                             parameters
                                 .iter()
                                 .map(|p| format!("{:#width$?}", p, width = width + 4))

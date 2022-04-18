@@ -407,14 +407,6 @@ mod tests {
     use crate::frame::amd64::Amd64Frame;
     use tig_syntax::parse_str;
 
-    //fn check(program: &str, expected: Expect) {
-    //    let (_, p) = parse_str(program);
-    //    assert_eq!(p.errors, vec![]);
-    //    let result = translate_program::<Amd64Frame>(p.program.expect("Should have compiled"));
-    //    assert_eq!(result.errors, vec![]);
-    //    expected.assert_debug_eq(&result.expty);
-    //}
-
     fn check_fragments(program: &str, fragments: Vec<Expect>) {
         let (_, p) = parse_str(program);
         assert_eq!(p.errors, vec![]);

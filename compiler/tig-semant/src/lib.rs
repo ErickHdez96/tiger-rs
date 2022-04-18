@@ -1,3 +1,4 @@
+pub mod canon;
 pub mod escape;
 pub mod frame;
 pub mod ir;

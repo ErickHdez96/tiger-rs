@@ -5,7 +5,7 @@ use tig_common::{
     SmolStr, Span,
 };
 
-use crate::{ir, op, translate::level, Frame, IR};
+use crate::{ir, op, Frame, IR};
 
 #[derive(Clone, PartialEq, Eq)]
 pub enum Access {
@@ -122,10 +122,6 @@ impl Frame for Amd64Frame {
 
     fn rv() -> Temp {
         Temp::named(SmolStr::new_inline("rv"))
-    }
-
-    fn proc_entry_exit(&self, _level: &level::Level<Self>, _body: Box<ir::Expr>) {
-        todo!()
     }
 
     fn proc_entry_exit_1(&self, body: Box<ir::Stmt>) -> Box<ir::Stmt> {

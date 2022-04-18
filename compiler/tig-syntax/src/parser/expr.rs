@@ -399,7 +399,7 @@ impl<'s> Parser<'s> {
                 expr: Box::new(ast::Expr {
                     span: Span::new(
                         exprs.get(0).map(|e| e.span.lo).unwrap_or_default(),
-                        exprs.iter().last().map(|e| e.span.hi).unwrap_or_default(),
+                        exprs.last().map(|e| e.span.hi).unwrap_or_default(),
                     ),
                     kind: ast::ExprKind::Exprs(exprs),
                 }),

@@ -158,7 +158,6 @@ pub fn tokenize_with_offset(input: &str, offset: u32) -> LexerResult {
     .collect();
 
     let eof_span = tokens
-        .iter()
         .last()
         .map(|t| Span::new(t.span.hi - 1, t.span.hi))
         .unwrap_or_else(|| Span::new(0, 1));

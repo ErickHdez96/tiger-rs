@@ -130,7 +130,7 @@ pub struct Span {
 }
 
 impl Span {
-    pub fn new(lo: u32, hi: u32) -> Self {
+    pub const fn new(lo: u32, hi: u32) -> Self {
         Self { lo, hi }
     }
 

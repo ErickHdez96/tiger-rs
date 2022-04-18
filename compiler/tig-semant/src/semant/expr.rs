@@ -182,7 +182,7 @@ impl<F: Frame> Translator<F> {
             }
 
             ast::ExprKind::Break => {
-                let end_l = match self.loop_stack.iter().last() {
+                let end_l = match self.loop_stack.last() {
                     Some(l) => tx::break_(span, l),
                     None => {
                         E!(self, span, "Cannot break outside a loop",);
@@ -501,13 +501,8 @@ impl<F: Frame> Translator<F> {
                     );
                 }
 
-                let record_span = ty_id_span.extend(
-                    fields
-                        .iter()
-                        .last()
-                        .map(|f| f.value.span)
-                        .unwrap_or(ty_id_span),
-                );
+                let record_span =
+                    ty_id_span.extend(fields.last().map(|f| f.value.span).unwrap_or(ty_id_span));
                 let mut expr_fields = Vec::with_capacity(fields.len());
                 // Iterate over every record literal field.
                 'field_literal_iter: for r_f in fields {
