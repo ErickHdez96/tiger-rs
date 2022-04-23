@@ -21,6 +21,4 @@ Compiler for the tiger languaged, based on the book `Modern Compiler Implementat
 * A parenthesized expression is a list of exprs with one element. Could be its own node.
 * When creating a Frame, a static link is passed to all of them, but not all of them need one.
 * Support more formals than can be passed through registers (support formals that have to be passed in memory).
-
-TODO tomorrow:
- * External calls (page 170)
+* Handling of assembly instructions is not performant at all.
